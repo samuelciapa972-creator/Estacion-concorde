@@ -7,7 +7,8 @@ Enlace: si después llega del surtidor el despacho que corresponde a una venta m
 MISMA venta y solo una de las dos se factura:
   * si una ya tiene factura (en cualquier estado, incluso RECHAZADO: su número debe reenviarse), esa manda y
     la otra pasa a NO_FACTURABLE;
-  * si ninguna tiene factura, manda el despacho (datos del equipo) y la venta manual pasa a NO_FACTURABLE;
+  * si ninguna tiene factura, NO se enlaza todavía: cuál de las dos se factura es una decisión PENDIENTE del
+    usuario (no se elige una por defecto). Mientras tanto, la primera que se facture define el enlace;
   * si las dos tienen factura, no se enlaza: ya hubo doble facturación y se corrige con nota crédito.
 La base lo garantiza además con triggers (migración 0003).
 """
@@ -21,7 +22,6 @@ from datetime import datetime
 from decimal import Decimal
 
 from ..calidad import TOLERANCIA_TOTALIZADOR, TOLERANCIA_VALOR
-from ..facturacion.modelos import EstadoFacturacion
 from ._bd import Conexion, ahora_local, auditar, exigir_autocommit
 from .emision import Origen
 
@@ -200,8 +200,10 @@ def enlazar_venta_manual(conn: Conexion, *, venta_id: int, despacho_id: int, usu
             problemas.append(f"valores distintos ({v_valor} vs {d_valor})")
         if v_facturada and d_facturado:
             problemas.append("las dos ya tienen factura: hubo doble facturación (se corrige con nota crédito)")
-        if not v_facturada and not d_facturado and d_estado != EstadoFacturacion.PENDIENTE:
-            problemas.append(f"el despacho no está pendiente (estado {d_estado})")
+        if not v_facturada and not d_facturado:
+            problemas.append(
+                "ninguna de las dos tiene factura: la regla para elegir cuál se factura está pendiente de decisión"
+            )
         if problemas:
             raise EnlaceInvalido("; ".join(problemas))
 
@@ -209,7 +211,7 @@ def enlazar_venta_manual(conn: Conexion, *, venta_id: int, despacho_id: int, usu
         if v_facturada:
             queda = Origen("venta_manual", venta_id)
             conn.execute("UPDATE despacho SET estado_facturacion = 'NO_FACTURABLE' WHERE id = %s", (despacho_id,))
-        else:
+        else:  # el despacho ya tiene factura
             queda = Origen("despacho", despacho_id)
             conn.execute("UPDATE venta_manual SET estado_facturacion = 'NO_FACTURABLE' WHERE id = %s", (venta_id,))
         auditar(

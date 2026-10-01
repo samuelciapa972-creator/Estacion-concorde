@@ -125,15 +125,25 @@ def venta_igual_al_despacho(e: Escenario, despacho: int) -> int:
     return e.datos.venta_manual(e.usuario, lado="A", volumen="1.861", valor=29757, ppu=15990)
 
 
-def test_enlazar_sin_facturas_manda_el_despacho(escenario, conn):
+def test_sin_facturas_no_se_enlaza_hasta_decidir_la_regla(escenario, conn):
     despacho = escenario.datos.despacho()
     venta = venta_igual_al_despacho(escenario, despacho)
+    with pytest.raises(EnlaceInvalido, match="pendiente de decisión"):
+        enlazar_venta_manual(conn, venta_id=venta, despacho_id=despacho, usuario_id=escenario.usuario)
+    assert escenario.datos.uno("SELECT despacho_id FROM venta_manual WHERE id = %s", (venta,)) is None
+    assert estado(escenario, Origen("venta_manual", venta)) == "PENDIENTE"
+    assert estado(escenario, Origen("despacho", despacho)) == "PENDIENTE"
+
+
+def test_enlazar_con_el_despacho_ya_facturado_manda_el_despacho(escenario, conn):
+    despacho = escenario.datos.despacho()
+    venta = venta_igual_al_despacho(escenario, despacho)
+    solicitar(escenario, conn, Origen("despacho", despacho))
     queda = enlazar_venta_manual(conn, venta_id=venta, despacho_id=despacho, usuario_id=escenario.usuario)
     assert queda == Origen("despacho", despacho)
     assert estado(escenario, Origen("venta_manual", venta)) == "NO_FACTURABLE"
     with pytest.raises(OrigenNoDisponible):
         solicitar(escenario, conn, Origen("venta_manual", venta))
-    assert solicitar(escenario, conn, queda).numero == "SETP1"
 
 
 def test_enlazar_con_la_venta_ya_facturada_manda_la_venta(escenario, conn):
@@ -175,6 +185,7 @@ def test_no_se_enlaza_lo_que_no_coincide(escenario, conn, cambios, mensaje):
 def test_un_enlace_no_se_repite_ni_se_cambia(escenario, conn):
     despacho, otro = escenario.datos.despacho(), escenario.datos.despacho()
     venta = venta_igual_al_despacho(escenario, despacho)
+    solicitar(escenario, conn, Origen("despacho", despacho))
     enlazar_venta_manual(conn, venta_id=venta, despacho_id=despacho, usuario_id=escenario.usuario)
     with pytest.raises(EnlaceInvalido, match="ya está enlazado"):
         enlazar_venta_manual(conn, venta_id=venta, despacho_id=otro, usuario_id=escenario.usuario)
