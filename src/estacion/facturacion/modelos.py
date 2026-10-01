@@ -79,6 +79,11 @@ class SolicitudFactura:
     forma_pago: str
     medio_pago: str
     fecha_emision: datetime
+    # Motor propio: el número, el CUFE y el documento los produce ESTE sistema (no el proveedor).
+    # Vacíos cuando la solicitud todavía no está numerada (p. ej. al validar o generar el XML).
+    numero: str | None = None
+    cufe: str | None = None
+    documento: bytes | None = None
 
     @property
     def total(self) -> Decimal:

@@ -34,6 +34,9 @@ class ProveedorSimulado:
       "rechazo"          -> ProveedorRechazo, no emite
       "timeout_antes"    -> ProveedorIncierto, no emite (la petición nunca llegó)
       "timeout_despues"  -> ProveedorIncierto, pero SÍ emite (se perdió la respuesta)
+    `falla_consulta` = True hace que `buscar_por_clave` lance ProveedorIncierto (servicio caído).
+
+    Si la solicitud ya trae número y CUFE (motor propio), los respeta; si no, numera con su propio contador.
     """
 
     def __init__(self, prefijo: str = "SETP", primer_numero: int = 1, reloj=datetime.now):
@@ -43,6 +46,7 @@ class ProveedorSimulado:
         self._reloj = reloj
         self._lock = threading.Lock()
         self.falla_siguiente: str | None = None
+        self.falla_consulta = False
         self.llamadas = 0
 
     def emitir(self, solicitud: SolicitudFactura) -> ResultadoEmision:
@@ -56,13 +60,16 @@ class ProveedorSimulado:
             previa = self._emitidas.get(solicitud.clave)
             if previa is not None:
                 return previa
-            numero = self._siguiente
-            self._siguiente += 1
-            cufe = hashlib.sha384(f"{self.prefijo}{numero}{solicitud.total}".encode()).hexdigest()
+            if solicitud.numero is not None and solicitud.cufe is not None:
+                numero, cufe = solicitud.numero, solicitud.cufe
+            else:
+                numero = str(self._siguiente)
+                self._siguiente += 1
+                cufe = hashlib.sha384(f"{self.prefijo}{numero}{solicitud.total}".encode()).hexdigest()
             resultado = ResultadoEmision(
                 clave=solicitud.clave,
                 prefijo=self.prefijo,
-                numero=str(numero),
+                numero=numero,
                 cufe=cufe,
                 emitida_en=self._reloj(),
                 detalle={"simulado": True},
@@ -74,4 +81,6 @@ class ProveedorSimulado:
 
     def buscar_por_clave(self, clave: str) -> ResultadoEmision | None:
         with self._lock:
+            if self.falla_consulta:
+                raise ProveedorIncierto("el servicio de consulta no responde (simulado)")
             return self._emitidas.get(clave)
