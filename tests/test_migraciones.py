@@ -13,9 +13,9 @@ from typing import Any
 
 import psycopg
 import pytest
-from conftest import BaseDePrueba, migrar
 from psycopg import errors
 
+from conftest import BaseDePrueba, migrar
 from estacion.facturacion.documentos import TIPOS_DOCUMENTO, calcular_dv
 from estacion.facturacion.modelos import EstadoFactura, EstadoFacturacion, EstadoOutbox, TipoTrabajo
 from estacion.modelos import FormaPago, PlacaTipo, Rol, Severidad
@@ -71,7 +71,7 @@ def valores_check(bd: BaseDePrueba, tabla: str, columna: str) -> set[str]:
            JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
            WHERE c.contype = 'c' AND c.conrelid = %s::regclass AND a.attname = %s
              AND cardinality(c.conkey) = 1""",
-        (f"{bd.esquema}.{tabla}", columna))}  # fmt: skip
+        (f"{bd.esquema}.{tabla}", columna))]  # fmt: skip
     con_lista = [d for d in definiciones if "ARRAY[" in d]
     assert len(con_lista) == 1, f"{tabla}.{columna}: se esperaba un CHECK con lista, hay {definiciones}"
     return set(re.findall(r"'([^']*)'::text", con_lista[0]))
@@ -159,8 +159,11 @@ class Datos:
         p = self.uno("""INSERT INTO producto (codigo, nombre) VALUES ('DIESEL', 'Diesel')
                         ON CONFLICT (codigo) DO UPDATE SET codigo = EXCLUDED.codigo RETURNING id""")
         i = self.insertar("importacion", surtidor_id=s, archivo_nombre="x.xls", archivo_sha256=uuid.uuid4().hex * 2)
-        t = self.uno("""INSERT INTO turno (surtidor_id, id_cierre, inicio, fin) VALUES (%s, 1, now(), now())
-                        ON CONFLICT (surtidor_id, id_cierre) DO UPDATE SET fin = EXCLUDED.fin RETURNING id""", (s,))
+        t = self.uno(
+            """INSERT INTO turno (surtidor_id, id_cierre, inicio, fin) VALUES (%s, 1, now(), now())
+                        ON CONFLICT (surtidor_id, id_cierre) DO UPDATE SET fin = EXCLUDED.fin RETURNING id""",
+            (s,),
+        )
         return self.insertar(
             "despacho", surtidor_id=s, id_externo=random.randrange(10**9), turno_id=t, lado="A", pistola=1,
             producto_id=p, inicio="2026-09-30 10:00", fin="2026-09-30 10:02", inicio_reloj="2026-09-30 10:00",

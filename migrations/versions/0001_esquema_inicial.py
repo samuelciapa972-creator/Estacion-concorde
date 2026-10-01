@@ -158,7 +158,8 @@ CREATE TABLE despacho (
     totalizador_valor   NUMERIC(18,0),
 
     estado_facturacion  TEXT NOT NULL DEFAULT 'PENDIENTE'
-                        CHECK (estado_facturacion IN ('PENDIENTE', 'EN_PROCESO', 'FACTURADO', 'INCIERTO', 'NO_FACTURABLE')),
+                        CHECK (estado_facturacion IN ('PENDIENTE', 'EN_PROCESO', 'FACTURADO',
+                                                       'INCIERTO', 'NO_FACTURABLE')),
 
     hash_contenido      TEXT  NOT NULL,            -- detecta re-exportaciones con datos distintos
     crudo               JSONB NOT NULL,

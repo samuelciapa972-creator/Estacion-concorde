@@ -1,8 +1,8 @@
 """Fixtures compartidas.
 
 `bd`: PostgreSQL real (el del docker-compose), con un esquema temporal propio por prueba al que se le
-aplican las migraciones de Alembic (`upgrade head`). Se borra al terminar: no toca las tablas de la base. Sin ESTACION_TEST_DSN la
-prueba se salta y lo dice (`make test` la define; `make test-rapido` no).
+aplican las migraciones de Alembic (`upgrade head`). Se borra al terminar: no toca las tablas de la base.
+Sin ESTACION_TEST_DSN la prueba se salta y lo dice (`make test` la define; `make test-rapido` no).
 """
 
 from __future__ import annotations

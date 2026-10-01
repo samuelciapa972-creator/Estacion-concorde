@@ -36,14 +36,16 @@ depends_on: str | Sequence[str] | None = None
 
 UPGRADE = r"""
 -- ---------------------------------------------------------------------
--- Dígito de verificación del NIT (pesos oficiales de la DIAN, de derecha a izquierda)
+-- Dígito de verificación del NIT (pesos oficiales de la DIAN, de derecha a izquierda).
+-- NULL si el NIT no es solo dígitos: así el CHECK de formato (no un error de conversión) es el que lo rechaza.
 -- ---------------------------------------------------------------------
 CREATE FUNCTION dv_nit(nit TEXT) RETURNS SMALLINT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
     SELECT (CASE WHEN r < 2 THEN r ELSE 11 - r END)::smallint
     FROM (SELECT sum(substr(reverse(nit), i, 1)::int
                      * ('{3,7,13,17,19,23,29,37,41,43,47,53,59,67,71}'::int[])[i]) % 11 AS r
-          FROM generate_series(1, length(nit)) AS i) AS t
+          FROM generate_series(1, length(nit)) AS i
+          WHERE nit ~ '^[0-9]{1,15}$') AS t
 $$;
 
 -- ---------------------------------------------------------------------
@@ -60,7 +62,7 @@ ALTER TABLE cliente ADD CONSTRAINT cliente_numero_check CHECK (numero_documento 
 ALTER TABLE cliente ADD CONSTRAINT cliente_dv_nit_check CHECK (
     CASE WHEN tipo_documento <> 'NIT' THEN TRUE
          WHEN numero_documento !~ '^[0-9]{8,10}$' THEN FALSE
-         ELSE digito_verificacion = dv_nit(numero_documento)::text END);
+         ELSE digito_verificacion IS NOT DISTINCT FROM dv_nit(numero_documento)::text END);  -- NIT sin DV: rechazado
 
 -- ---------------------------------------------------------------------
 -- Estación = el emisor. TODO sale del RUT (hoja de ESTABLECIMIENTOS para la dirección). Sin valores
@@ -150,7 +152,8 @@ CREATE TABLE venta_manual (
     -- Despacho del surtidor al que corresponde, cuando llegue (Fase 3).
     despacho_id         BIGINT   UNIQUE REFERENCES despacho (id),
     estado_facturacion  TEXT     NOT NULL DEFAULT 'PENDIENTE'
-                        CHECK (estado_facturacion IN ('PENDIENTE', 'EN_PROCESO', 'FACTURADO', 'INCIERTO', 'NO_FACTURABLE')),
+                        CHECK (estado_facturacion IN ('PENDIENTE', 'EN_PROCESO', 'FACTURADO',
+                                                       'INCIERTO', 'NO_FACTURABLE')),
     creada_en           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
