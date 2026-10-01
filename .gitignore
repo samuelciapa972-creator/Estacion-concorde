@@ -1,0 +1,20 @@
+# Secretos y datos reales: NUNCA al repositorio
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+datos/
+*.xls
+*.xlsx
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Claude y Prompts locales
+CLAUDE.md
+PROMPT_CLAUDE*

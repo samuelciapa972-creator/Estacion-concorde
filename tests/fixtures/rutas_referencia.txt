@@ -1,0 +1,123 @@
+Invoice @xsi:schemaLocation
+Invoice/cac:AccountingCustomerParty
+Invoice/cac:AccountingCustomerParty/cac:Party
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:Contact
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:Contact/cbc:ElectronicMail
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID @schemeName
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity/cbc:CompanyID @schemeAgencyID,schemeAgencyName,schemeName
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyName
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyName/cbc:Name
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cac:TaxScheme
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cac:TaxScheme/cbc:ID
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cac:TaxScheme/cbc:Name
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID @schemeAgencyID,schemeAgencyName,schemeName
+Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cbc:RegistrationName
+Invoice/cac:AccountingCustomerParty/cbc:AdditionalAccountID
+Invoice/cac:AccountingSupplierParty
+Invoice/cac:AccountingSupplierParty/cac:Party
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:Contact
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:Contact/cbc:ElectronicMail
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:Contact/cbc:Telephone
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cac:CorporateRegistrationScheme
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cac:CorporateRegistrationScheme/cbc:ID
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cac:CorporateRegistrationScheme/cbc:Name
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cbc:CompanyID @schemeAgencyID,schemeAgencyName,schemeID,schemeName
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cbc:RegistrationName
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyName
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyName/cbc:Name
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cac:AddressLine
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cac:AddressLine/cbc:Line
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cac:Country
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cac:Country/cbc:IdentificationCode
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cac:Country/cbc:Name @languageID
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cbc:CityName
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cbc:CountrySubentity
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cbc:CountrySubentityCode
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cbc:ID
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:RegistrationAddress/cbc:PostalZone
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:TaxScheme
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:TaxScheme/cbc:ID
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cac:TaxScheme/cbc:Name
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID @schemeAgencyID,schemeAgencyName,schemeID,schemeName
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cbc:RegistrationName
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyTaxScheme/cbc:TaxLevelCode @listName
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address/cac:AddressLine
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address/cac:AddressLine/cbc:Line
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address/cac:Country
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address/cac:Country/cbc:IdentificationCode
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address/cac:Country/cbc:Name @languageID
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address/cbc:CityName
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address/cbc:CountrySubentity
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address/cbc:CountrySubentityCode
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address/cbc:ID
+Invoice/cac:AccountingSupplierParty/cac:Party/cac:PhysicalLocation/cac:Address/cbc:PostalZone
+Invoice/cac:AccountingSupplierParty/cac:Party/cbc:IndustryClassificationCode
+Invoice/cac:AccountingSupplierParty/cbc:AdditionalAccountID
+Invoice/cac:InvoiceLine
+Invoice/cac:InvoiceLine/cac:Item
+Invoice/cac:InvoiceLine/cac:Item/cac:SellersItemIdentification
+Invoice/cac:InvoiceLine/cac:Item/cac:SellersItemIdentification/cbc:ID
+Invoice/cac:InvoiceLine/cac:Item/cac:StandardItemIdentification
+Invoice/cac:InvoiceLine/cac:Item/cac:StandardItemIdentification/cbc:ID @schemeID,schemeName
+Invoice/cac:InvoiceLine/cac:Item/cbc:Description
+Invoice/cac:InvoiceLine/cac:Price
+Invoice/cac:InvoiceLine/cac:Price/cbc:BaseQuantity @unitCode
+Invoice/cac:InvoiceLine/cac:Price/cbc:PriceAmount @currencyID
+Invoice/cac:InvoiceLine/cbc:ID
+Invoice/cac:InvoiceLine/cbc:InvoicedQuantity @unitCode
+Invoice/cac:InvoiceLine/cbc:LineExtensionAmount @currencyID
+Invoice/cac:InvoiceLine/cbc:Note
+Invoice/cac:LegalMonetaryTotal
+Invoice/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount @currencyID
+Invoice/cac:LegalMonetaryTotal/cbc:ChargeTotalAmount @currencyID
+Invoice/cac:LegalMonetaryTotal/cbc:LineExtensionAmount @currencyID
+Invoice/cac:LegalMonetaryTotal/cbc:PayableAmount @currencyID
+Invoice/cac:LegalMonetaryTotal/cbc:PrepaidAmount @currencyID
+Invoice/cac:LegalMonetaryTotal/cbc:TaxExclusiveAmount @currencyID
+Invoice/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount @currencyID
+Invoice/cac:PaymentMeans
+Invoice/cac:PaymentMeans/cbc:ID
+Invoice/cac:PaymentMeans/cbc:PaymentDueDate
+Invoice/cac:PaymentMeans/cbc:PaymentMeansCode
+Invoice/cbc:CustomizationID
+Invoice/cbc:DocumentCurrencyCode
+Invoice/cbc:ID
+Invoice/cbc:InvoiceTypeCode
+Invoice/cbc:IssueDate
+Invoice/cbc:IssueTime
+Invoice/cbc:LineCountNumeric
+Invoice/cbc:ProfileExecutionID
+Invoice/cbc:ProfileID
+Invoice/cbc:UBLVersionID
+Invoice/cbc:UUID @schemeID,schemeName
+Invoice/ext:UBLExtensions
+Invoice/ext:UBLExtensions/ext:UBLExtension
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:AuthorizationProvider
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:AuthorizationProvider/sts:AuthorizationProviderID @schemeAgencyID,schemeAgencyName,schemeID,schemeName
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceControl
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceControl/sts:AuthorizationPeriod
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceControl/sts:AuthorizationPeriod/cbc:EndDate
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceControl/sts:AuthorizationPeriod/cbc:StartDate
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceControl/sts:AuthorizedInvoices
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceControl/sts:AuthorizedInvoices/sts:From
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceControl/sts:AuthorizedInvoices/sts:Prefix
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceControl/sts:AuthorizedInvoices/sts:To
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceControl/sts:InvoiceAuthorization
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceSource
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:InvoiceSource/cbc:IdentificationCode @listAgencyID,listAgencyName,listSchemeURI
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:QRCode
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:SoftwareProvider
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:SoftwareProvider/sts:ProviderID @schemeAgencyID,schemeAgencyName,schemeID,schemeName
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:SoftwareProvider/sts:SoftwareID @schemeAgencyID,schemeAgencyName
+Invoice/ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions/sts:SoftwareSecurityCode @schemeAgencyID,schemeAgencyName
