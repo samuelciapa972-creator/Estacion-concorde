@@ -6,6 +6,8 @@
 #   make lint      ruff (lint + formato) y mypy
 #   make format    aplica el formato de ruff
 #   make db-reset  BORRA la base de desarrollo y la recrea con las migraciones
+#   make simulador surtidor simulado: un despacho cada 20 s en la base de desarrollo (Ctrl+C para parar)
+#   make worker    procesa la cola de envíos con el proveedor SIMULADO (no envía nada a la DIAN)
 
 VENV   ?= .venv
 PY     := $(VENV)/bin/python
@@ -16,7 +18,7 @@ export ESTACION_TEST_DSN
 DATABASE_URL ?= postgresql://estacion:estacion@localhost:5432/estacion
 export DATABASE_URL
 
-.PHONY: install up migrate down db-reset test test-rapido lint format
+.PHONY: install up migrate down db-reset test test-rapido lint format simulador worker
 
 install:
 	uv venv --python 3.12 $(VENV)
@@ -52,3 +54,9 @@ lint:
 format:
 	$(PY) -m ruff check --fix src tests migrations
 	$(PY) -m ruff format src tests migrations
+
+simulador:
+	$(PY) -m estacion.simulador --cada 20s
+
+worker:
+	$(PY) -m estacion.worker

@@ -17,7 +17,7 @@ from psycopg import errors
 from conftest import BaseDePrueba, migrar
 from estacion.facturacion.documentos import TIPOS_DOCUMENTO, calcular_dv
 from estacion.facturacion.modelos import EstadoFactura, EstadoFacturacion, EstadoOutbox, TipoTrabajo
-from estacion.modelos import FormaPago, PlacaTipo, Rol, Severidad
+from estacion.modelos import FormaPago, MarcaSurtidor, PlacaTipo, Rol, Severidad
 
 pytestmark = pytest.mark.bd
 
@@ -36,7 +36,7 @@ def test_upgrade_desde_cero_downgrade_a_base_y_otra_vez_upgrade(esquema_vacio):
     bd = esquema_vacio
     migrar(bd.dsn)
     assert tablas(bd) == TABLAS_INICIALES | TABLAS_NUEVAS | {"alembic_version"}
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0002"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0003"
 
     migrar(bd.dsn, "base", bajar=True)
     assert tablas(bd) == {"alembic_version"}
@@ -47,7 +47,7 @@ def test_upgrade_desde_cero_downgrade_a_base_y_otra_vez_upgrade(esquema_vacio):
     ) == 0  # fmt: skip
 
     migrar(bd.dsn)
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0002"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0003"
 
 
 def test_bajar_solo_la_0002_deja_el_esquema_inicial(esquema_vacio):
@@ -86,6 +86,7 @@ def valores_check(bd: BaseDePrueba, tabla: str, columna: str) -> set[str]:
         ("outbox", "tipo", set(TipoTrabajo)),
         ("usuario", "rol", set(Rol)),
         ("despacho", "forma_pago", set(FormaPago)),
+        ("surtidor", "marca", set(MarcaSurtidor)),
         ("despacho", "placa_tipo", set(PlacaTipo)),
         ("anomalia", "severidad", set(Severidad)),
         # factura y venta manual: solo lo que se puede facturar (OTRO es "desconocido en el archivo")
@@ -238,7 +239,7 @@ def test_factura_valida_y_su_numero(emision):
 
 def test_un_despacho_no_puede_tener_dos_facturas(emision):
     factura(emision, consecutivo=1)
-    with pytest.raises(errors.UniqueViolation, match="despacho_id"):
+    with pytest.raises(errors.UniqueViolation, match="ya tiene factura"):  # el trigger de la 0003 llega primero
         factura(emision, consecutivo=2)
 
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .calidad import TOLERANCIA_TOTALIZADOR
 from .modelos import Anomalia, Despacho, RechazoFila, Severidad, TurnoDerivado
 
 LOTE = 1000
@@ -201,6 +202,27 @@ def cargar(
                 (importacion_id, Jsonb({"hash_nuevo": d.hash_contenido}), surtidor_id, d.id_externo),
             )
             registradas += cur.rowcount
+
+        # Continuidad del contador CONTRA LO YA GUARDADO: `calidad` solo ve el lote, y una fuente en tiempo real
+        # (simulador, Wayne) entrega lotes de un despacho. Mismo tipo de anomalía: no se duplica con la del lote.
+        cur.execute(
+            """INSERT INTO anomalia (importacion_id, despacho_id, tipo, severidad, detalle)
+               SELECT %(i)s, x.id,
+                      CASE WHEN x.dif > 0 THEN 'GAP_TOTALIZADOR' ELSE 'RETROCESO_TOTALIZADOR' END, %(sev)s,
+                      jsonb_build_object('lado', x.lado, 'pistola', x.pistola, 'despacho_previo', x.previo,
+                                         'diferencia_galones', x.dif::text,
+                                         'nota', 'continuidad contra los despachos ya guardados')
+               FROM (SELECT d.id, d.importacion_id, d.lado, d.pistola,
+                            lag(d.id_externo) OVER w AS previo,
+                            d.totalizador_vol - lag(d.totalizador_vol) OVER w - d.volumen_bruto AS dif
+                     FROM despacho d
+                     WHERE d.surtidor_id = %(s)s AND d.totalizador_vol IS NOT NULL
+                     WINDOW w AS (PARTITION BY d.lado, d.pistola ORDER BY d.id_externo)) x
+               WHERE x.importacion_id = %(i)s AND abs(x.dif) > %(tol)s
+               ON CONFLICT DO NOTHING""",
+            {"i": importacion_id, "s": surtidor_id, "sev": Severidad.ALTA.value, "tol": TOLERANCIA_TOTALIZADOR},
+        )
+        registradas += cur.rowcount
 
         # Crédito con placa/equipo que aún no está asignado a un cliente
         cur.execute(

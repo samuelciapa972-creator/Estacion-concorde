@@ -1,4 +1,4 @@
-# Facturación estación de servicio · Fase 1
+# Facturación estación de servicio · banco de pruebas
 
 Importador y normalizador de los despachos del surtidor **Speed Solutions**
 (el formato **Wayne** se agrega como un parser más, sin tocar el resto).
@@ -9,7 +9,7 @@ Requisitos: [uv](https://docs.astral.sh/uv/) (instala Python 3.12) y Docker.
 
 ```bash
 make install        # .venv con Python 3.12 y dependencias de desarrollo
-make up             # PostgreSQL 16 del docker-compose (aplica db/schema.sql la primera vez)
+make up             # PostgreSQL 16 del docker-compose + migraciones de Alembic
 make test           # pruebas, incluidas las de integración contra ese PostgreSQL
 make lint           # ruff (lint + formato) y mypy
 make test-rapido    # sin PostgreSQL: las pruebas de integración se saltan
@@ -21,6 +21,11 @@ make test-rapido    # sin PostgreSQL: las pruebas de integración se saltan
 .venv/bin/python -m estacion.cli speed_solutions D260928_084701.xls \
     --dsn postgresql://estacion:estacion@localhost/estacion
 
+# Surtidor SIMULADO (sin ningún equipo real): un despacho cada 20 s a la base de desarrollo
+make simulador                     # o: .venv/bin/python -m estacion.simulador --lado A --cada 20s
+.venv/bin/python -m estacion.simulador --cantidad 10 --cada 0 --en-seco   # solo mostrar
+make worker                        # cola de envíos con el proveedor SIMULADO (nada sale a la DIAN)
+
 # Prueba contra el export real (el archivo NUNCA va al repositorio)
 ARCHIVO_REAL=D260928_084701.xls .venv/bin/python -m pytest -k real
 ```
@@ -29,11 +34,15 @@ ARCHIVO_REAL=D260928_084701.xls .venv/bin/python -m pytest -k real
 
 | Archivo | Qué hace |
 |---|---|
-| `db/schema.sql` | Esquema PostgreSQL: surtidor, turno, despacho, cliente, vehículo, anomalía, importación y vistas de ventas |
+| `migrations/` | Esquema PostgreSQL (Alembic): 0001 despachos y catálogos, 0002 facturación, 0003 simulador y "una factura por venta" con venta manual enlazada |
 | `parsers/speed_solutions.py` | XML → `Despacho` normalizado (streaming; fila dañada se rechaza, archivo truncado aborta todo) |
 | `normalizacion.py` | Placa (válida / sin dato / nombre de equipo), kilometraje, forma de pago |
 | `calidad.py` | Duplicados, fechas malas del reloj, valor vs volumen, continuidad de contadores, crédito sin placa, turnos |
-| `carga.py` | Carga transaccional e idempotente a PostgreSQL |
+| `carga.py` | Carga transaccional e idempotente a PostgreSQL; continuidad de contadores también contra lo ya guardado |
+| `surtidores/` | `FuenteDespachos` (leer/confirmar), `ArchivoSpeedSolutions`, `SimuladorSurtidor` e `ingesta` (calidad + carga) |
+| `simulador.py` | Comando del simulador; retoma ids, turno y contadores de la corrida anterior |
+| `servicios/` | Numeración atómica, emisión (`solicitar`), cola de envíos (`outbox`), ventas manuales, pendientes y enlace venta manual ↔ despacho |
+| `worker.py` | Procesa la cola de envíos (hoy solo con el proveedor simulado) |
 | `reportes.py` | Excel de ventas (Diario, Mensual, Turnos, Datos, Alertas): `python -m estacion.reportes speed_solutions archivo.xls -o reporte.xlsx` |
 | `facturacion/` | Interfaz `ProveedorFacturacion`, proveedor simulado y validación de clientes. **Contexto, plan y reglas: ver `CLAUDE.md`** |
 | `facturacion/xml_factura.py` | Generador del XML de factura electrónica (UBL 2.1 DIAN) **sin firma**, caso acotado; su estructura coincide con una factura real validada. CUFE sin verificar. |

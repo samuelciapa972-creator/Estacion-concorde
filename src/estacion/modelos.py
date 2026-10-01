@@ -13,6 +13,12 @@ from enum import StrEnum
 from typing import Any
 
 
+class MarcaSurtidor(StrEnum):
+    SPEED_SOLUTIONS = "SPEED_SOLUTIONS"
+    WAYNE = "WAYNE"
+    SIMULADOR = "SIMULADOR"  # banco de pruebas: nunca es un equipo real
+
+
 class FormaPago(StrEnum):
     CONTADO = "CONTADO"
     CREDITO = "CREDITO"

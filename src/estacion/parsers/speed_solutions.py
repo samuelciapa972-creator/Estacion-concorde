@@ -57,7 +57,7 @@ def leer(ruta: str | Path) -> ResultadoLectura:
             crudo.update({hijo.tag: (hijo.text or "").strip() for hijo in elem})
             elem.clear()  # no acumular memoria
             try:
-                despachos.append(_normalizar(crudo))
+                despachos.append(normalizar_fila(crudo))
             except (KeyError, ValueError, ArithmeticError) as e:
                 # ArithmeticError cubre decimal.InvalidOperation
                 id_txt = crudo.get("ID-DESPACHO", "")
@@ -74,7 +74,10 @@ def leer(ruta: str | Path) -> ResultadoLectura:
     return ResultadoLectura(MARCA, _sha256(ruta), despachos, rechazos)
 
 
-def _normalizar(crudo: dict[str, str]) -> Despacho:
+def normalizar_fila(crudo: dict[str, str], *, marca: str = MARCA) -> Despacho:
+    """Una fila `<book>` (campos como texto) -> `Despacho`. Lanza ValueError/KeyError/ArithmeticError si está
+    dañada. El simulador de surtidor genera filas en este mismo formato y las pasa por aquí (`marca`=SIMULADOR).
+    """
     faltan = [k for k in _OBLIGATORIOS if not crudo.get(k)]
     if faltan:
         raise ValueError(f"campos vacíos o ausentes: {', '.join(faltan)}")
@@ -93,7 +96,7 @@ def _normalizar(crudo: dict[str, str]) -> Despacho:
     tot_vol, tot_valor = _totalizador(crudo, pistola)
 
     return Despacho(
-        surtidor_marca=MARCA,
+        surtidor_marca=marca,
         codigo_surtidor=crudo["ID-SURTIDOR"],
         id_externo=int(crudo["ID-DESPACHO"]),
         id_cierre=int(crudo["ID-CIERRE"]),
@@ -135,6 +138,17 @@ def _totalizador(crudo: dict[str, str], pistola: int) -> tuple[Decimal | None, D
     if not bruto or not dinero:
         return None, None
     return Decimal(bruto), Decimal(dinero)
+
+
+def escribir(ruta: str | Path, filas: list[dict[str, str]]) -> None:
+    """Escribe filas en el formato del export (`<catalog><book ID-DESPACHO=...>`). Para pruebas y simulador."""
+    catalogo = ET.Element("catalog")
+    for fila in filas:
+        libro = ET.SubElement(catalogo, "book", {"ID-DESPACHO": fila["ID-DESPACHO"]})
+        for campo, valor in fila.items():
+            if campo != "ID-DESPACHO":
+                ET.SubElement(libro, campo).text = valor
+    ET.ElementTree(catalogo).write(ruta, encoding="utf-8", xml_declaration=True)
 
 
 def _sha256(ruta: Path) -> str:

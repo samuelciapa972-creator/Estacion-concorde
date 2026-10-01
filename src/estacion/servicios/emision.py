@@ -141,6 +141,36 @@ def leer_cliente(conn: Conexion, cliente_id: int) -> Cliente:
     )
 
 
+def _verificar_enlace(conn: Conexion, origen: Origen) -> None:
+    """Una venta manual enlazada a su despacho es la MISMA venta: si la otra mitad ya tiene factura, no se emite.
+
+    Bloquea el despacho ANTES de tocar la numeración. Orden de bloqueo en todo el sistema: venta manual ->
+    despacho -> numeración (el trigger de la 0003 también bloquea el despacho); con otro orden, facturar en
+    paralelo el despacho y su venta manual termina en un bloqueo mutuo (deadlock).
+    """
+    if origen.tipo == "venta_manual":
+        fila = conn.execute(
+            """SELECT d.id FROM venta_manual v JOIN despacho d ON d.id = v.despacho_id
+               WHERE v.id = %s FOR UPDATE OF d""",
+            (origen.id,),
+        ).fetchone()
+        # La otra mitad es el despacho enlazado (su propia factura RECHAZADA, que se reenvía, no cuenta).
+        otra_mitad = fila is not None and _existe(conn, "SELECT 1 FROM factura WHERE despacho_id = %s", fila[0])
+    else:  # el despacho ya quedó bloqueado por leer_origen
+        otra_mitad = _existe(
+            conn,
+            """SELECT 1 FROM factura f JOIN venta_manual v ON v.id = f.venta_manual_id
+               WHERE v.despacho_id = %s""",
+            origen.id,
+        )
+    if otra_mitad:
+        raise OrigenNoDisponible(f"la venta ya tiene factura por su despacho o venta manual enlazada ({origen.tipo})")
+
+
+def _existe(conn: Conexion, sql: str, valor: int) -> bool:
+    return conn.execute(sql, (valor,)).fetchone() is not None
+
+
 class ServicioEmision:
     def __init__(
         self,
@@ -186,6 +216,7 @@ class ServicioEmision:
 
             if datos.estado != EstadoFacturacion.PENDIENTE:
                 raise OrigenNoDisponible(f"el {origen.tipo} {origen.id} no está pendiente (estado {datos.estado})")
+            _verificar_enlace(conn, origen)
 
             # 3. Número: el de una factura rechazada de este mismo origen, o uno nuevo.
             rechazada = conn.execute(
