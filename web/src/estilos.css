@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+/*
+ * Marca: negro con dorado. Marco negro, área de trabajo clara (se lee mejor al sol en la tablet de pista).
+ * Contraste verificado con la fórmula WCAG 2.x (mínimo AA = 4,5:1 para texto normal):
+ *   dorado sobre negro 7,98 · negro sobre dorado (botón) 7,98 · negro sobre dorado-hover 6,14
+ *   dorado-oscuro sobre fondo 5,55 / sobre blanco 6,05 · crema sobre negro 16,21 · tinta sobre fondo 16,05
+ * El dorado claro (#C9A227) NO se usa como texto sobre fondo claro: para eso está dorado-oscuro.
+ * Los colores de estado (rojo, verde, ámbar, azul) no son de marca: se reconocen por su significado.
+ */
+@theme {
+  --color-negro: #0e0e0e;
+  --color-negro-suave: #1f1c17;
+  --color-dorado: #c9a227;
+  --color-dorado-hover: #b08d1e;
+  --color-dorado-oscuro: #7a5f0e;
+  --color-dorado-claro: #f3e7c0;
+  --color-crema: #f3ebd3;
+  --color-fondo: #f7f5f0;
+  --color-tinta: #1c1917;
+}
+
+html {
+  /* Evita el zoom por doble toque y el resaltado azul en la tablet */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  background: var(--color-fondo);
+  color: var(--color-tinta);
+}
+
+/*
+ * Movimiento (principios tomados de la guía de movimiento de HyperFrames, aplicados con CSS nativo):
+ *   · solo transform y opacity (nada de width/height/top/left): fluido en la tablet;
+ *   · entradas cortas (150–250 ms) que nunca bloquean al bombero;
+ *   · los grupos escalonados llegan en máximo 0,4 s para leerse como un solo movimiento;
+ *   · los valores de dinero y galones NO se animan;
+ *   · con «reducir movimiento» del sistema, todo se apaga (al final del archivo).
+ */
+@keyframes entrar {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes bajar {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes rebote {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Pantalla que entra */
+.animar-entrada {
+  animation: entrar 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* Avisos, errores y el menú de celular */
+.animar-aviso {
+  animation: bajar 180ms ease-out both;
+}
+/* Ícono de "facturado" */
+.animar-rebote {
+  animation: rebote 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+/* Listas y filas: escalonado de 30 ms, tope de 12 elementos => el grupo llega en ~0,4 s. */
+.animar-lista > * {
+  animation: entrar 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animar-lista > :nth-child(2) { animation-delay: 30ms; }
+.animar-lista > :nth-child(3) { animation-delay: 60ms; }
+.animar-lista > :nth-child(4) { animation-delay: 90ms; }
+.animar-lista > :nth-child(5) { animation-delay: 120ms; }
+.animar-lista > :nth-child(6) { animation-delay: 150ms; }
+.animar-lista > :nth-child(7) { animation-delay: 180ms; }
+.animar-lista > :nth-child(8) { animation-delay: 210ms; }
+.animar-lista > :nth-child(9) { animation-delay: 240ms; }
+.animar-lista > :nth-child(10) { animation-delay: 270ms; }
+.animar-lista > :nth-child(11) { animation-delay: 300ms; }
+.animar-lista > :nth-child(n + 12) { animation-delay: 330ms; }
+
+/* Respuesta al toque; en el computador, un leve realce al pasar el mouse. Deshabilitado: quieto. */
+.boton-tactil {
+  transition:
+    transform 120ms ease-out,
+    filter 150ms ease-out,
+    background-color 150ms ease-out;
+}
+.boton-tactil:active:not(:disabled) {
+  transform: scale(0.97);
+}
+@media (hover: hover) {
+  .boton-tactil:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

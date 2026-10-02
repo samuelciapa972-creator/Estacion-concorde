@@ -1,0 +1,39 @@
+# Caddy: HTTPS en la red local de la estación, el frontend (PWA) y la API bajo /api, en el mismo origen.
+#
+# La PWA (instalarla en la tablet, el service worker) solo funciona con HTTPS. Sin internet ni dominio público, los
+# certificados los emite la CA INTERNA de Caddy; su certificado raíz se instala UNA vez en la tablet
+# (docs/despliegue.md). ESTACION_HOST: nombres o IPs por los que se entra, separados por coma
+# (p. ej. "localhost, 192.168.1.50").
+{
+	local_certs
+	skip_install_trust
+}
+
+{$ESTACION_HOST:localhost} {
+	encode zstd gzip
+
+	# API: Caddy agrega X-Forwarded-For con la IP real de la tablet (la API la usa para el límite de intentos).
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Todo lo que NO lleva hash en el nombre (index.html de cualquier ruta del SPA, service worker, manifiesto, la
+	# API) se revalida siempre: así una versión nueva llega a la tablet al recargar.
+	@sin_cache not path /assets/*
+	header @sin_cache Cache-Control "no-cache"
+	@con_hash path /assets/*
+	header @con_hash Cache-Control "public, max-age=31536000, immutable"
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+		-Server
+	}
+}

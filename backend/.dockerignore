@@ -1,0 +1,16 @@
+.venv/
+**/__pycache__/
+**/*.pyc
+**/*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+tests/
+# Datos reales y secretos: nunca dentro de una imagen
+*.xls
+*.xlsx
+.env
+.env.*
+*.pem
+*.p12
+*.pfx

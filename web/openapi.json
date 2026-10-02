@@ -1,0 +1,4089 @@
+{
+  "components": {
+    "schemas": {
+      "AnomaliaSalida": {
+        "properties": {
+          "creada_en": {
+            "format": "date-time",
+            "title": "Creada En",
+            "type": "string"
+          },
+          "despacho_id_externo": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Despacho Id Externo"
+          },
+          "detalle": {
+            "additionalProperties": true,
+            "title": "Detalle",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "resuelta": {
+            "title": "Resuelta",
+            "type": "boolean"
+          },
+          "severidad": {
+            "enum": [
+              "ALTA",
+              "AVISO",
+              "INFO"
+            ],
+            "title": "Severidad",
+            "type": "string"
+          },
+          "surtidor_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surtidor Id"
+          },
+          "tipo": {
+            "title": "Tipo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tipo",
+          "severidad",
+          "surtidor_id",
+          "despacho_id_externo",
+          "detalle",
+          "creada_en",
+          "resuelta"
+        ],
+        "title": "AnomaliaSalida",
+        "type": "object"
+      },
+      "BusquedaVentasSalida": {
+        "properties": {
+          "filas": {
+            "items": {
+              "$ref": "#/components/schemas/VentaSalida"
+            },
+            "title": "Filas",
+            "type": "array"
+          },
+          "por_manguera": {
+            "items": {
+              "$ref": "#/components/schemas/TotalMangueraSalida"
+            },
+            "title": "Por Manguera",
+            "type": "array"
+          },
+          "total": {
+            "$ref": "#/components/schemas/TotalesSalida",
+            "description": "del filtro completo, no solo de esta página"
+          }
+        },
+        "required": [
+          "filas",
+          "total",
+          "por_manguera"
+        ],
+        "title": "BusquedaVentasSalida",
+        "type": "object"
+      },
+      "CaptchaSalida": {
+        "properties": {
+          "clave_sitio": {
+            "description": "clave PÚBLICA del widget",
+            "title": "Clave Sitio",
+            "type": "string"
+          },
+          "proveedor": {
+            "enum": [
+              "turnstile",
+              "hcaptcha"
+            ],
+            "title": "Proveedor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proveedor",
+          "clave_sitio"
+        ],
+        "title": "CaptchaSalida",
+        "type": "object"
+      },
+      "CatalogosSalida": {
+        "properties": {
+          "medios_pago": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Medios Pago",
+            "type": "array"
+          },
+          "productos": {
+            "items": {
+              "$ref": "#/components/schemas/ProductoSalida"
+            },
+            "title": "Productos",
+            "type": "array"
+          },
+          "surtidores": {
+            "items": {
+              "$ref": "#/components/schemas/SurtidorSalida"
+            },
+            "title": "Surtidores",
+            "type": "array"
+          },
+          "tipos_documento": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tipos Documento",
+            "type": "array"
+          }
+        },
+        "required": [
+          "surtidores",
+          "productos",
+          "medios_pago",
+          "tipos_documento"
+        ],
+        "title": "CatalogosSalida",
+        "type": "object"
+      },
+      "ClienteEntrada": {
+        "additionalProperties": false,
+        "properties": {
+          "apellidos": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Apellidos",
+            "type": "string"
+          },
+          "autoriza_tratamiento": {
+            "description": "autorización de tratamiento de datos (Ley 1581 de 2012)",
+            "title": "Autoriza Tratamiento",
+            "type": "boolean"
+          },
+          "digito_verificacion": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9]$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "solo NIT; si falta se calcula",
+            "title": "Digito Verificacion"
+          },
+          "email": {
+            "maxLength": 200,
+            "minLength": 5,
+            "title": "Email",
+            "type": "string"
+          },
+          "nombres": {
+            "description": "para NIT: razón social",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Nombres",
+            "type": "string"
+          },
+          "numero_documento": {
+            "maxLength": 20,
+            "minLength": 3,
+            "title": "Numero Documento",
+            "type": "string"
+          },
+          "tipo_documento": {
+            "enum": [
+              "CC",
+              "NIT",
+              "NIT_EXTERIOR",
+              "CE",
+              "PA",
+              "PPT"
+            ],
+            "title": "Tipo Documento",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tipo_documento",
+          "numero_documento",
+          "nombres",
+          "email",
+          "autoriza_tratamiento"
+        ],
+        "title": "ClienteEntrada",
+        "type": "object"
+      },
+      "ClienteFactura": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "nombre_mostrar": {
+            "title": "Nombre Mostrar",
+            "type": "string"
+          },
+          "tipo_documento": {
+            "enum": [
+              "CC",
+              "NIT",
+              "NIT_EXTERIOR",
+              "CE",
+              "PA",
+              "PPT"
+            ],
+            "title": "Tipo Documento",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tipo_documento",
+          "nombre_mostrar"
+        ],
+        "title": "ClienteFactura",
+        "type": "object"
+      },
+      "ClienteSalida": {
+        "properties": {
+          "activo": {
+            "title": "Activo",
+            "type": "boolean"
+          },
+          "apellidos": {
+            "title": "Apellidos",
+            "type": "string"
+          },
+          "digito_verificacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digito Verificacion"
+          },
+          "email_enmascarado": {
+            "title": "Email Enmascarado",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "nombre_mostrar": {
+            "description": "razón social si es NIT; nombres y apellidos si es persona",
+            "title": "Nombre Mostrar",
+            "type": "string"
+          },
+          "nombres": {
+            "title": "Nombres",
+            "type": "string"
+          },
+          "numero_documento": {
+            "title": "Numero Documento",
+            "type": "string"
+          },
+          "tipo_documento": {
+            "enum": [
+              "CC",
+              "NIT",
+              "NIT_EXTERIOR",
+              "CE",
+              "PA",
+              "PPT"
+            ],
+            "title": "Tipo Documento",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tipo_documento",
+          "numero_documento",
+          "digito_verificacion",
+          "nombre_mostrar",
+          "nombres",
+          "apellidos",
+          "email_enmascarado",
+          "activo"
+        ],
+        "title": "ClienteSalida",
+        "type": "object"
+      },
+      "ClientesPaginaSalida": {
+        "properties": {
+          "filas": {
+            "items": {
+              "$ref": "#/components/schemas/ClienteSalida"
+            },
+            "title": "Filas",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filas",
+          "total"
+        ],
+        "title": "ClientesPaginaSalida",
+        "type": "object"
+      },
+      "ConfiguracionPublicaSalida": {
+        "properties": {
+          "captcha": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaptchaSalida"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: el registro no pide captcha (banco de pruebas)"
+          },
+          "estacion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EstacionPublicaSalida"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: no hay una estación activa configurada"
+          }
+        },
+        "required": [
+          "captcha",
+          "estacion"
+        ],
+        "title": "ConfiguracionPublicaSalida",
+        "type": "object"
+      },
+      "Creado": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "Creado",
+        "type": "object"
+      },
+      "Error": {
+        "properties": {
+          "detail": {
+            "title": "Detail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "Error",
+        "type": "object"
+      },
+      "EstacionPublicaSalida": {
+        "properties": {
+          "nombre": {
+            "description": "nombre comercial de la estación (o la razón social si no tiene)",
+            "title": "Nombre",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nombre"
+        ],
+        "title": "EstacionPublicaSalida",
+        "type": "object"
+      },
+      "FacturaEntrada": {
+        "additionalProperties": false,
+        "properties": {
+          "clave": {
+            "description": "generada UNA vez por intento de emisión (p. ej. uuid sin guiones); reintentar con la misma clave no duplica la factura",
+            "pattern": "^[A-Za-z0-9]{16,64}$",
+            "title": "Clave",
+            "type": "string"
+          },
+          "cliente_id": {
+            "title": "Cliente Id",
+            "type": "integer"
+          },
+          "medio_pago": {
+            "enum": [
+              "EFECTIVO",
+              "TARJETA"
+            ],
+            "title": "Medio Pago",
+            "type": "string"
+          },
+          "origen_id": {
+            "title": "Origen Id",
+            "type": "integer"
+          },
+          "origen_tipo": {
+            "enum": [
+              "despacho",
+              "venta_manual"
+            ],
+            "title": "Origen Tipo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clave",
+          "origen_tipo",
+          "origen_id",
+          "cliente_id",
+          "medio_pago"
+        ],
+        "title": "FacturaEntrada",
+        "type": "object"
+      },
+      "FacturaSalida": {
+        "properties": {
+          "cliente": {
+            "$ref": "#/components/schemas/ClienteFactura"
+          },
+          "cufe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cufe"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "estado": {
+            "enum": [
+              "EN_PROCESO",
+              "FACTURADO",
+              "RECHAZADO",
+              "INCIERTO"
+            ],
+            "title": "Estado",
+            "type": "string"
+          },
+          "fecha_emision": {
+            "format": "date-time",
+            "title": "Fecha Emision",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "medio_pago": {
+            "enum": [
+              "EFECTIVO",
+              "TARJETA"
+            ],
+            "title": "Medio Pago",
+            "type": "string"
+          },
+          "nueva": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "solo al emitir: False si la clave ya tenía factura",
+            "title": "Nueva"
+          },
+          "numero": {
+            "title": "Numero",
+            "type": "string"
+          },
+          "origen_id": {
+            "title": "Origen Id",
+            "type": "integer"
+          },
+          "origen_tipo": {
+            "enum": [
+              "despacho",
+              "venta_manual"
+            ],
+            "title": "Origen Tipo",
+            "type": "string"
+          },
+          "total": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "numero",
+          "estado",
+          "total",
+          "cufe",
+          "fecha_emision",
+          "medio_pago",
+          "origen_tipo",
+          "origen_id",
+          "cliente",
+          "error"
+        ],
+        "title": "FacturaSalida",
+        "type": "object"
+      },
+      "FilaRechazadaSalida": {
+        "properties": {
+          "fila": {
+            "description": "línea del archivo (el encabezado es la 1)",
+            "title": "Fila",
+            "type": "integer"
+          },
+          "problemas": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problemas",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fila",
+          "problemas"
+        ],
+        "title": "FilaRechazadaSalida",
+        "type": "object"
+      },
+      "FilaTurnoSalida": {
+        "properties": {
+          "despachos": {
+            "title": "Despachos",
+            "type": "integer"
+          },
+          "estado": {
+            "enum": [
+              "ABIERTO",
+              "CERRADO"
+            ],
+            "title": "Estado",
+            "type": "string"
+          },
+          "fin": {
+            "format": "date-time",
+            "title": "Fin",
+            "type": "string"
+          },
+          "galones": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Galones",
+            "type": "string"
+          },
+          "id_cierre": {
+            "title": "Id Cierre",
+            "type": "integer"
+          },
+          "inicio": {
+            "format": "date-time",
+            "title": "Inicio",
+            "type": "string"
+          },
+          "lado": {
+            "title": "Lado",
+            "type": "string"
+          },
+          "lectura_final_valor": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lectura Final Valor"
+          },
+          "lectura_final_vol": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lectura Final Vol"
+          },
+          "surtidor_id": {
+            "title": "Surtidor Id",
+            "type": "integer"
+          },
+          "turno_id": {
+            "title": "Turno Id",
+            "type": "integer"
+          },
+          "valor": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Valor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turno_id",
+          "surtidor_id",
+          "id_cierre",
+          "estado",
+          "inicio",
+          "fin",
+          "lado",
+          "despachos",
+          "galones",
+          "valor",
+          "lectura_final_vol",
+          "lectura_final_valor"
+        ],
+        "title": "FilaTurnoSalida",
+        "type": "object"
+      },
+      "FilaVentasSalida": {
+        "properties": {
+          "despachos": {
+            "title": "Despachos",
+            "type": "integer"
+          },
+          "forma_pago": {
+            "enum": [
+              "CONTADO",
+              "CREDITO",
+              "OTRO"
+            ],
+            "title": "Forma Pago",
+            "type": "string"
+          },
+          "galones": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Galones",
+            "type": "string"
+          },
+          "origen": {
+            "description": "MANUAL: digitada en la pista, sin despacho enlazado",
+            "enum": [
+              "SURTIDOR",
+              "MANUAL"
+            ],
+            "title": "Origen",
+            "type": "string"
+          },
+          "periodo": {
+            "format": "date",
+            "title": "Periodo",
+            "type": "string"
+          },
+          "producto": {
+            "title": "Producto",
+            "type": "string"
+          },
+          "surtidor_id": {
+            "title": "Surtidor Id",
+            "type": "integer"
+          },
+          "valor": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Valor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "surtidor_id",
+          "periodo",
+          "producto",
+          "forma_pago",
+          "origen",
+          "despachos",
+          "galones",
+          "valor"
+        ],
+        "title": "FilaVentasSalida",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ImportacionSalida": {
+        "properties": {
+          "en_seco": {
+            "description": "true: solo se validó; no se guardó nada",
+            "title": "En Seco",
+            "type": "boolean"
+          },
+          "existentes": {
+            "description": "ya estaban registrados: no se modificaron",
+            "title": "Existentes",
+            "type": "integer"
+          },
+          "filas": {
+            "title": "Filas",
+            "type": "integer"
+          },
+          "nuevas": {
+            "title": "Nuevas",
+            "type": "integer"
+          },
+          "rechazadas": {
+            "items": {
+              "$ref": "#/components/schemas/FilaRechazadaSalida"
+            },
+            "title": "Rechazadas",
+            "type": "array"
+          }
+        },
+        "required": [
+          "en_seco",
+          "filas",
+          "nuevas",
+          "existentes",
+          "rechazadas"
+        ],
+        "title": "ImportacionSalida",
+        "type": "object"
+      },
+      "LoginEntrada": {
+        "additionalProperties": false,
+        "properties": {
+          "pin": {
+            "examples": [
+              "1234"
+            ],
+            "maxLength": 8,
+            "minLength": 4,
+            "title": "Pin",
+            "type": "string"
+          },
+          "usuario": {
+            "examples": [
+              "bombero1"
+            ],
+            "maxLength": 40,
+            "minLength": 3,
+            "title": "Usuario",
+            "type": "string"
+          }
+        },
+        "required": [
+          "usuario",
+          "pin"
+        ],
+        "title": "LoginEntrada",
+        "type": "object"
+      },
+      "PendienteSalida": {
+        "properties": {
+          "fecha": {
+            "format": "date-time",
+            "title": "Fecha",
+            "type": "string"
+          },
+          "forma_pago": {
+            "enum": [
+              "CONTADO",
+              "CREDITO",
+              "OTRO"
+            ],
+            "title": "Forma Pago",
+            "type": "string"
+          },
+          "lado": {
+            "title": "Lado",
+            "type": "string"
+          },
+          "origen_id": {
+            "title": "Origen Id",
+            "type": "integer"
+          },
+          "origen_tipo": {
+            "enum": [
+              "despacho",
+              "venta_manual"
+            ],
+            "title": "Origen Tipo",
+            "type": "string"
+          },
+          "placa": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placa"
+          },
+          "ppu": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Ppu",
+            "type": "string"
+          },
+          "producto": {
+            "title": "Producto",
+            "type": "string"
+          },
+          "surtidor_id": {
+            "title": "Surtidor Id",
+            "type": "integer"
+          },
+          "valor": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Valor",
+            "type": "string"
+          },
+          "volumen": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Volumen",
+            "type": "string"
+          }
+        },
+        "required": [
+          "origen_tipo",
+          "origen_id",
+          "surtidor_id",
+          "lado",
+          "producto",
+          "volumen",
+          "valor",
+          "ppu",
+          "forma_pago",
+          "fecha",
+          "placa"
+        ],
+        "title": "PendienteSalida",
+        "type": "object"
+      },
+      "PosibleDuplicadoSalida": {
+        "properties": {
+          "despacho_id": {
+            "title": "Despacho Id",
+            "type": "integer"
+          },
+          "galones": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Galones",
+            "type": "string"
+          },
+          "inicio_despacho": {
+            "format": "date-time",
+            "title": "Inicio Despacho",
+            "type": "string"
+          },
+          "lado": {
+            "title": "Lado",
+            "type": "string"
+          },
+          "producto": {
+            "title": "Producto",
+            "type": "string"
+          },
+          "registrada_en": {
+            "format": "date-time",
+            "title": "Registrada En",
+            "type": "string"
+          },
+          "surtidor_id": {
+            "title": "Surtidor Id",
+            "type": "integer"
+          },
+          "valor": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Valor",
+            "type": "string"
+          },
+          "venta_manual_id": {
+            "title": "Venta Manual Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "venta_manual_id",
+          "despacho_id",
+          "surtidor_id",
+          "lado",
+          "producto",
+          "galones",
+          "valor",
+          "registrada_en",
+          "inicio_despacho"
+        ],
+        "title": "PosibleDuplicadoSalida",
+        "type": "object"
+      },
+      "ProductoSalida": {
+        "properties": {
+          "codigo": {
+            "title": "Codigo",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "nombre": {
+            "title": "Nombre",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "codigo",
+          "nombre"
+        ],
+        "title": "ProductoSalida",
+        "type": "object"
+      },
+      "RegistroPublicoEntrada": {
+        "additionalProperties": false,
+        "properties": {
+          "apellidos": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Apellidos",
+            "type": "string"
+          },
+          "autoriza_tratamiento": {
+            "description": "autorización de tratamiento de datos (Ley 1581 de 2012)",
+            "title": "Autoriza Tratamiento",
+            "type": "boolean"
+          },
+          "captcha": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "token del widget; obligatorio si la API tiene captcha configurado",
+            "title": "Captcha"
+          },
+          "digito_verificacion": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9]$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "solo NIT; si falta se calcula",
+            "title": "Digito Verificacion"
+          },
+          "email": {
+            "maxLength": 200,
+            "minLength": 5,
+            "title": "Email",
+            "type": "string"
+          },
+          "nombres": {
+            "description": "para NIT: razón social",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Nombres",
+            "type": "string"
+          },
+          "numero_documento": {
+            "maxLength": 20,
+            "minLength": 3,
+            "title": "Numero Documento",
+            "type": "string"
+          },
+          "tipo_documento": {
+            "enum": [
+              "CC",
+              "NIT",
+              "NIT_EXTERIOR",
+              "CE",
+              "PA",
+              "PPT"
+            ],
+            "title": "Tipo Documento",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tipo_documento",
+          "numero_documento",
+          "nombres",
+          "email",
+          "autoriza_tratamiento"
+        ],
+        "title": "RegistroPublicoEntrada",
+        "type": "object"
+      },
+      "RegistroPublicoSalida": {
+        "properties": {
+          "mensaje": {
+            "title": "Mensaje",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mensaje"
+        ],
+        "title": "RegistroPublicoSalida",
+        "type": "object"
+      },
+      "SaludSalida": {
+        "properties": {
+          "base_de_datos": {
+            "const": "ok",
+            "title": "Base De Datos",
+            "type": "string"
+          },
+          "estado": {
+            "const": "ok",
+            "title": "Estado",
+            "type": "string"
+          },
+          "migracion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Migracion"
+          }
+        },
+        "required": [
+          "estado",
+          "base_de_datos",
+          "migracion"
+        ],
+        "title": "SaludSalida",
+        "type": "object"
+      },
+      "SurtidorSalida": {
+        "properties": {
+          "codigo": {
+            "title": "Codigo",
+            "type": "string"
+          },
+          "descripcion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descripcion"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "marca": {
+            "title": "Marca",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "marca",
+          "codigo",
+          "descripcion"
+        ],
+        "title": "SurtidorSalida",
+        "type": "object"
+      },
+      "TokenSalida": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expira_en": {
+            "description": "segundos de validez del token",
+            "title": "Expira En",
+            "type": "integer"
+          },
+          "token_type": {
+            "const": "bearer",
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          },
+          "usuario": {
+            "$ref": "#/components/schemas/UsuarioSalida"
+          }
+        },
+        "required": [
+          "access_token",
+          "expira_en",
+          "usuario"
+        ],
+        "title": "TokenSalida",
+        "type": "object"
+      },
+      "TotalMangueraSalida": {
+        "properties": {
+          "galones": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Galones",
+            "type": "string"
+          },
+          "lado": {
+            "title": "Lado",
+            "type": "string"
+          },
+          "producto": {
+            "title": "Producto",
+            "type": "string"
+          },
+          "surtidor_id": {
+            "title": "Surtidor Id",
+            "type": "integer"
+          },
+          "valor": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Valor",
+            "type": "string"
+          },
+          "ventas": {
+            "title": "Ventas",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ventas",
+          "galones",
+          "valor",
+          "surtidor_id",
+          "lado",
+          "producto"
+        ],
+        "title": "TotalMangueraSalida",
+        "type": "object"
+      },
+      "TotalesSalida": {
+        "properties": {
+          "galones": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Galones",
+            "type": "string"
+          },
+          "valor": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Valor",
+            "type": "string"
+          },
+          "ventas": {
+            "title": "Ventas",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ventas",
+          "galones",
+          "valor"
+        ],
+        "title": "TotalesSalida",
+        "type": "object"
+      },
+      "UsuarioListadoSalida": {
+        "properties": {
+          "activo": {
+            "title": "Activo",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "nombre": {
+            "title": "Nombre",
+            "type": "string"
+          },
+          "rol": {
+            "enum": [
+              "BOMBERO",
+              "ADMIN"
+            ],
+            "title": "Rol",
+            "type": "string"
+          },
+          "usuario": {
+            "title": "Usuario",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "usuario",
+          "nombre",
+          "rol",
+          "activo"
+        ],
+        "title": "UsuarioListadoSalida",
+        "type": "object"
+      },
+      "UsuarioSalida": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "nombre": {
+            "title": "Nombre",
+            "type": "string"
+          },
+          "rol": {
+            "enum": [
+              "BOMBERO",
+              "ADMIN"
+            ],
+            "title": "Rol",
+            "type": "string"
+          },
+          "usuario": {
+            "title": "Usuario",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "usuario",
+          "nombre",
+          "rol"
+        ],
+        "title": "UsuarioSalida",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VehiculoEntrada": {
+        "additionalProperties": false,
+        "properties": {
+          "cliente_id": {
+            "title": "Cliente Id",
+            "type": "integer"
+          },
+          "descripcion": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descripcion"
+          },
+          "placa": {
+            "description": "placa o nombre del equipo; se normaliza",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Placa",
+            "type": "string"
+          }
+        },
+        "required": [
+          "placa",
+          "cliente_id"
+        ],
+        "title": "VehiculoEntrada",
+        "type": "object"
+      },
+      "VehiculoSalida": {
+        "properties": {
+          "activo": {
+            "title": "Activo",
+            "type": "boolean"
+          },
+          "cliente_id": {
+            "title": "Cliente Id",
+            "type": "integer"
+          },
+          "cliente_nombre": {
+            "title": "Cliente Nombre",
+            "type": "string"
+          },
+          "descripcion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descripcion"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "identificador": {
+            "title": "Identificador",
+            "type": "string"
+          },
+          "tipo": {
+            "enum": [
+              "PLACA",
+              "EQUIPO_TEXTO"
+            ],
+            "title": "Tipo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "identificador",
+          "tipo",
+          "cliente_id",
+          "cliente_nombre",
+          "descripcion",
+          "activo"
+        ],
+        "title": "VehiculoSalida",
+        "type": "object"
+      },
+      "VehiculosPaginaSalida": {
+        "properties": {
+          "filas": {
+            "items": {
+              "$ref": "#/components/schemas/VehiculoSalida"
+            },
+            "title": "Filas",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filas",
+          "total"
+        ],
+        "title": "VehiculosPaginaSalida",
+        "type": "object"
+      },
+      "VentaManualEntrada": {
+        "additionalProperties": false,
+        "properties": {
+          "forma_pago": {
+            "default": "CONTADO",
+            "enum": [
+              "CONTADO",
+              "CREDITO"
+            ],
+            "title": "Forma Pago",
+            "type": "string"
+          },
+          "lado": {
+            "examples": [
+              "A"
+            ],
+            "maxLength": 1,
+            "minLength": 1,
+            "title": "Lado",
+            "type": "string"
+          },
+          "ppu": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,11}0*$)\\d{0,8}\\.\\d{0,2}0*$)",
+                    "type": "string"
+                  }
+                ],
+                "examples": [
+                  "15990"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ppu"
+          },
+          "producto": {
+            "examples": [
+              "CORRIENTE"
+            ],
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Producto",
+            "type": "string"
+          },
+          "surtidor_id": {
+            "title": "Surtidor Id",
+            "type": "integer"
+          },
+          "valor": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,14}|(?=[\\d.]{1,15}0*$)\\d{0,14}\\.\\d{0,0}0*$)",
+                "type": "string"
+              }
+            ],
+            "examples": [
+              "29757"
+            ],
+            "title": "Valor"
+          },
+          "volumen": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,9}|(?=[\\d.]{1,13}0*$)\\d{0,9}\\.\\d{0,3}0*$)",
+                "type": "string"
+              }
+            ],
+            "examples": [
+              "1.861"
+            ],
+            "title": "Volumen"
+          }
+        },
+        "required": [
+          "surtidor_id",
+          "lado",
+          "producto",
+          "volumen",
+          "valor"
+        ],
+        "title": "VentaManualEntrada",
+        "type": "object"
+      },
+      "VentaSalida": {
+        "properties": {
+          "cliente_documento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cliente Documento"
+          },
+          "cliente_nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cliente Nombre"
+          },
+          "cliente_tipo": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CC",
+                  "NIT",
+                  "NIT_EXTERIOR",
+                  "CE",
+                  "PA",
+                  "PPT"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cliente Tipo"
+          },
+          "estado_facturacion": {
+            "enum": [
+              "PENDIENTE",
+              "EN_PROCESO",
+              "FACTURADO",
+              "INCIERTO",
+              "NO_FACTURABLE"
+            ],
+            "title": "Estado Facturacion",
+            "type": "string"
+          },
+          "factura_estado": {
+            "anyOf": [
+              {
+                "enum": [
+                  "EN_PROCESO",
+                  "FACTURADO",
+                  "RECHAZADO",
+                  "INCIERTO"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factura Estado"
+          },
+          "factura_numero": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factura Numero"
+          },
+          "fecha": {
+            "format": "date-time",
+            "title": "Fecha",
+            "type": "string"
+          },
+          "forma_pago": {
+            "enum": [
+              "CONTADO",
+              "CREDITO",
+              "OTRO"
+            ],
+            "title": "Forma Pago",
+            "type": "string"
+          },
+          "id_externo": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "número del despacho en el surtidor (null en venta manual)",
+            "title": "Id Externo"
+          },
+          "lado": {
+            "title": "Lado",
+            "type": "string"
+          },
+          "origen_id": {
+            "title": "Origen Id",
+            "type": "integer"
+          },
+          "origen_tipo": {
+            "enum": [
+              "despacho",
+              "venta_manual"
+            ],
+            "title": "Origen Tipo",
+            "type": "string"
+          },
+          "placa": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placa"
+          },
+          "producto": {
+            "title": "Producto",
+            "type": "string"
+          },
+          "surtidor": {
+            "title": "Surtidor",
+            "type": "string"
+          },
+          "surtidor_id": {
+            "title": "Surtidor Id",
+            "type": "integer"
+          },
+          "valor": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Valor",
+            "type": "string"
+          },
+          "vendedor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendedor"
+          },
+          "vendedor_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendedor Id"
+          },
+          "volumen": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Volumen",
+            "type": "string"
+          }
+        },
+        "required": [
+          "origen_tipo",
+          "origen_id",
+          "id_externo",
+          "surtidor_id",
+          "surtidor",
+          "lado",
+          "producto",
+          "volumen",
+          "valor",
+          "forma_pago",
+          "fecha",
+          "placa",
+          "estado_facturacion",
+          "factura_numero",
+          "factura_estado",
+          "cliente_tipo",
+          "cliente_documento",
+          "cliente_nombre",
+          "vendedor_id",
+          "vendedor"
+        ],
+        "title": "VentaSalida",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "description": "token de POST /auth/login",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "API del sistema que reemplaza a Nexus. **Banco de pruebas: no envía nada a la DIAN.** Dinero y galones viajan como texto decimal.",
+    "title": "Estación de servicio — banco de pruebas",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/anomalias": {
+      "get": {
+        "operationId": "listar_anomalias_anomalias_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "estado",
+            "required": false,
+            "schema": {
+              "default": "abiertas",
+              "enum": [
+                "abiertas",
+                "resueltas",
+                "todas"
+              ],
+              "title": "Estado",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severidad",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ALTA",
+                    "AVISO",
+                    "INFO"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severidad"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limite",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AnomaliaSalida"
+                  },
+                  "title": "Response Listar Anomalias Anomalias Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Anomalías para revisión humana",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "login_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "423": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Locked"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Ingreso con usuario y PIN",
+        "tags": [
+          "sesión"
+        ]
+      }
+    },
+    "/auth/yo": {
+      "get": {
+        "operationId": "yo_auth_yo_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Usuario de la sesión actual",
+        "tags": [
+          "sesión"
+        ]
+      }
+    },
+    "/catalogos": {
+      "get": {
+        "operationId": "catalogos_catalogos_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogosSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Surtidores, productos y opciones de los formularios",
+        "tags": [
+          "pista"
+        ]
+      }
+    },
+    "/clientes": {
+      "get": {
+        "operationId": "listar_clientes_clientes_get",
+        "parameters": [
+          {
+            "description": "inicio del documento o parte del nombre",
+            "in": "query",
+            "name": "texto",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "inicio del documento o parte del nombre",
+              "title": "Texto"
+            }
+          },
+          {
+            "in": "query",
+            "name": "estado",
+            "required": false,
+            "schema": {
+              "default": "activos",
+              "enum": [
+                "activos",
+                "inactivos",
+                "todos"
+              ],
+              "title": "Estado",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limite",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "desplazamiento",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Desplazamiento",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientesPaginaSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Listar y buscar clientes",
+        "tags": [
+          "administración"
+        ]
+      },
+      "post": {
+        "operationId": "crear_clientes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClienteEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Registrar un cliente desde la pista (exige la autorización de datos)",
+        "tags": [
+          "clientes"
+        ]
+      }
+    },
+    "/clientes/buscar": {
+      "get": {
+        "operationId": "buscar_clientes_buscar_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tipo",
+            "required": true,
+            "schema": {
+              "enum": [
+                "CC",
+                "NIT",
+                "NIT_EXTERIOR",
+                "CE",
+                "PA",
+                "PPT"
+              ],
+              "title": "Tipo",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "numero",
+            "required": true,
+            "schema": {
+              "maxLength": 20,
+              "minLength": 3,
+              "title": "Numero",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Buscar un cliente por tipo y número de documento",
+        "tags": [
+          "clientes"
+        ]
+      }
+    },
+    "/clientes/importar": {
+      "post": {
+        "operationId": "importar_clientes_csv_clientes_importar_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "en_seco",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "En Seco",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "text/csv": {
+              "example": "tipo_documento;numero_documento;nombres;apellidos;email;autoriza_tratamiento;fecha_autorizacion\n",
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportacionSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Importar clientes desde CSV (en seco por defecto; exige autorización de datos con fecha)",
+        "tags": [
+          "administración"
+        ]
+      }
+    },
+    "/clientes/{cliente_id}/activar": {
+      "post": {
+        "operationId": "activar_cliente_clientes__cliente_id__activar_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cliente_id",
+            "required": true,
+            "schema": {
+              "title": "Cliente Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reactivar un cliente",
+        "tags": [
+          "administración"
+        ]
+      }
+    },
+    "/clientes/{cliente_id}/desactivar": {
+      "post": {
+        "operationId": "desactivar_cliente_clientes__cliente_id__desactivar_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cliente_id",
+            "required": true,
+            "schema": {
+              "title": "Cliente Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Baja lógica: no se le factura ni aparece en la pista; se conserva su historial",
+        "tags": [
+          "administración"
+        ]
+      }
+    },
+    "/despachos/pendientes": {
+      "get": {
+        "operationId": "pendientes_despachos_pendientes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "surtidor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Surtidor Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lado",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lado"
+            }
+          },
+          {
+            "description": "hora local de la estación",
+            "in": "query",
+            "name": "desde",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "hora local de la estación",
+              "title": "Desde"
+            }
+          },
+          {
+            "in": "query",
+            "name": "forma_pago",
+            "required": false,
+            "schema": {
+              "default": "CONTADO",
+              "enum": [
+                "CONTADO",
+                "CREDITO",
+                "TODAS"
+              ],
+              "title": "Forma Pago",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limite",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PendienteSalida"
+                  },
+                  "title": "Response Pendientes Despachos Pendientes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Despachos y ventas manuales pendientes de facturar (los más recientes primero)",
+        "tags": [
+          "pista"
+        ]
+      }
+    },
+    "/facturas": {
+      "post": {
+        "operationId": "emitir_facturas_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FacturaEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacturaSalida"
+                }
+              }
+            },
+            "description": "la clave ya tenía factura (doble clic o reintento)"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacturaSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "la venta ya no está pendiente o la clave se usó para otra venta"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "datos inválidos o caso todavía no soportado"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "falta configuración fiscal o numeración: no se emite"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Emitir la factura de un despacho o venta manual (idempotente por `clave`)",
+        "tags": [
+          "facturas"
+        ]
+      }
+    },
+    "/facturas/{factura_id}": {
+      "get": {
+        "operationId": "consultar_facturas__factura_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "factura_id",
+            "required": true,
+            "schema": {
+              "title": "Factura Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacturaSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Estado de una factura",
+        "tags": [
+          "facturas"
+        ]
+      }
+    },
+    "/facturas/{factura_id}/pdf": {
+      "get": {
+        "operationId": "pdf_facturas__factura_id__pdf_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "factura_id",
+            "required": true,
+            "schema": {
+              "title": "Factura Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {}
+            },
+            "description": "representación gráfica (PDF)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "la factura todavía no está validada"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "el XML no permite armar la representación"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Representación gráfica (PDF) de una factura validada, armada desde su XML",
+        "tags": [
+          "facturas"
+        ]
+      }
+    },
+    "/publico/configuracion": {
+      "get": {
+        "operationId": "configuracion_publica_publico_configuracion_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionPublicaSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Lo que necesita la página pública de registro (captcha)",
+        "tags": [
+          "clientes",
+          "público"
+        ]
+      }
+    },
+    "/publico/registro": {
+      "post": {
+        "description": "Respuesta IGUAL si el documento ya estaba registrado: así no se puede averiguar quién es cliente.\nUn registro público nunca modifica los datos de un cliente existente.",
+        "operationId": "registro_publico_publico_registro_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistroPublicoEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistroPublicoSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Autorregistro del cliente por QR (público, con límite de tasa)",
+        "tags": [
+          "clientes",
+          "público"
+        ]
+      }
+    },
+    "/reportes/contador": {
+      "get": {
+        "operationId": "contador_reportes_contador_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "desde",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Desde",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hasta",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Hasta",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "formato",
+            "required": false,
+            "schema": {
+              "default": "xlsx",
+              "enum": [
+                "xlsx",
+                "csv",
+                "pdf"
+              ],
+              "title": "Formato",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {},
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {},
+              "text/csv": {}
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ventas y facturas para la contabilidad (formato PROVISIONAL; lleva datos personales)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/diario": {
+      "get": {
+        "operationId": "diario_reportes_diario_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "desde",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Desde",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hasta",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Hasta",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surtidor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Surtidor Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FilaVentasSalida"
+                  },
+                  "title": "Response Diario Reportes Diario Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ventas por día, producto y forma de pago",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/exportar": {
+      "get": {
+        "operationId": "exportar_reportes_exportar_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "surtidor_id",
+            "required": true,
+            "schema": {
+              "title": "Surtidor Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "desde",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Desde",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hasta",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Hasta",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Excel de ventas de un surtidor (Diario, Mensual, Turnos, Datos, Alertas, Notas)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/mensual": {
+      "get": {
+        "operationId": "mensual_reportes_mensual_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "desde",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Desde",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hasta",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Hasta",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surtidor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Surtidor Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FilaVentasSalida"
+                  },
+                  "title": "Response Mensual Reportes Mensual Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ventas por mes, producto y forma de pago",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/pdf": {
+      "get": {
+        "operationId": "reporte_pdf_reportes_pdf_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tipo",
+            "required": true,
+            "schema": {
+              "enum": [
+                "diario",
+                "mensual",
+                "turno"
+              ],
+              "title": "Tipo",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "desde",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Desde",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hasta",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Hasta",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surtidor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Surtidor Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {}
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reporte diario, mensual o por turno en PDF (sin datos personales)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/posibles-duplicados": {
+      "get": {
+        "operationId": "posibles_duplicados_reportes_posibles_duplicados_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "desde",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Desde",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hasta",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Hasta",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PosibleDuplicadoSalida"
+                  },
+                  "title": "Response Posibles Duplicados Reportes Posibles Duplicados Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ventas manuales sin enlace que parecen ser un despacho ya contado (posible doble conteo)",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/reportes/turno": {
+      "get": {
+        "operationId": "turno_reportes_turno_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "desde",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Desde",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hasta",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Hasta",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surtidor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Surtidor Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "turno_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Turno Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FilaTurnoSalida"
+                  },
+                  "title": "Response Turno Reportes Turno Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resumen por turno (ID-CIERRE) y lado",
+        "tags": [
+          "reportes"
+        ]
+      }
+    },
+    "/salud": {
+      "get": {
+        "operationId": "salud_salud_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaludSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "La API y la base responden (y la base tiene las migraciones)",
+        "tags": [
+          "salud"
+        ]
+      }
+    },
+    "/usuarios": {
+      "get": {
+        "operationId": "usuarios_usuarios_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UsuarioListadoSalida"
+                  },
+                  "title": "Response Usuarios Usuarios Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Usuarios (para filtrar por vendedor)",
+        "tags": [
+          "administración"
+        ]
+      }
+    },
+    "/vehiculos": {
+      "get": {
+        "operationId": "listar_vehiculos_vehiculos_get",
+        "parameters": [
+          {
+            "description": "parte de la placa",
+            "in": "query",
+            "name": "texto",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 60,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "parte de la placa",
+              "title": "Texto"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cliente_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cliente Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "estado",
+            "required": false,
+            "schema": {
+              "default": "activos",
+              "enum": [
+                "activos",
+                "inactivos",
+                "todos"
+              ],
+              "title": "Estado",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limite",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "desplazamiento",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Desplazamiento",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehiculosPaginaSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Listar y buscar vehículos",
+        "tags": [
+          "administración"
+        ]
+      },
+      "post": {
+        "operationId": "crear_vehiculo_vehiculos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehiculoEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehiculoSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Registrar un vehículo o equipo de un cliente",
+        "tags": [
+          "administración"
+        ]
+      }
+    },
+    "/vehiculos/importar": {
+      "post": {
+        "operationId": "importar_vehiculos_csv_vehiculos_importar_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "en_seco",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "En Seco",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "text/csv": {
+              "example": "placa;tipo_documento;numero_documento;descripcion\n",
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportacionSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Importar vehículos desde CSV (en seco por defecto; los dueños deben existir)",
+        "tags": [
+          "administración"
+        ]
+      }
+    },
+    "/vehiculos/{vehiculo_id}/activar": {
+      "post": {
+        "operationId": "activar_vehiculo_vehiculos__vehiculo_id__activar_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "vehiculo_id",
+            "required": true,
+            "schema": {
+              "title": "Vehiculo Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehiculoSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Activar Vehiculo",
+        "tags": [
+          "administración"
+        ]
+      }
+    },
+    "/vehiculos/{vehiculo_id}/desactivar": {
+      "post": {
+        "operationId": "desactivar_vehiculo_vehiculos__vehiculo_id__desactivar_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "vehiculo_id",
+            "required": true,
+            "schema": {
+              "title": "Vehiculo Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehiculoSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Desactivar Vehiculo",
+        "tags": [
+          "administración"
+        ]
+      }
+    },
+    "/ventas": {
+      "get": {
+        "operationId": "ventas_ventas_get",
+        "parameters": [
+          {
+            "description": "hora local, incluida",
+            "in": "query",
+            "name": "desde",
+            "required": true,
+            "schema": {
+              "description": "hora local, incluida",
+              "format": "date-time",
+              "title": "Desde",
+              "type": "string"
+            }
+          },
+          {
+            "description": "hora local, excluida",
+            "in": "query",
+            "name": "hasta",
+            "required": true,
+            "schema": {
+              "description": "hora local, excluida",
+              "format": "date-time",
+              "title": "Hasta",
+              "type": "string"
+            }
+          },
+          {
+            "description": "equipo",
+            "in": "query",
+            "name": "surtidor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "equipo",
+              "title": "Surtidor Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lado",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lado"
+            }
+          },
+          {
+            "in": "query",
+            "name": "producto",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Producto"
+            }
+          },
+          {
+            "in": "query",
+            "name": "forma_pago",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "CONTADO",
+                    "CREDITO",
+                    "OTRO"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Forma Pago"
+            }
+          },
+          {
+            "in": "query",
+            "name": "estado_facturacion",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "PENDIENTE",
+                    "EN_PROCESO",
+                    "FACTURADO",
+                    "INCIERTO",
+                    "NO_FACTURABLE"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado Facturacion"
+            }
+          },
+          {
+            "description": "parte de la placa",
+            "in": "query",
+            "name": "placa",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "parte de la placa",
+              "title": "Placa"
+            }
+          },
+          {
+            "description": "número de documento",
+            "in": "query",
+            "name": "cliente",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "número de documento",
+              "title": "Cliente"
+            }
+          },
+          {
+            "description": "número del despacho en el surtidor",
+            "in": "query",
+            "name": "id_externo",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "número del despacho en el surtidor",
+              "title": "Id Externo"
+            }
+          },
+          {
+            "description": "número completo, p. ej. SETP1",
+            "in": "query",
+            "name": "factura",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "número completo, p. ej. SETP1",
+              "title": "Factura"
+            }
+          },
+          {
+            "in": "query",
+            "name": "vendedor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vendedor Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limite",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "desplazamiento",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Desplazamiento",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusquedaVentasSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Buscar ventas (filtros de Nexus) con totales",
+        "tags": [
+          "administración"
+        ]
+      }
+    },
+    "/ventas-manuales": {
+      "post": {
+        "operationId": "crear_venta_manual_ventas_manuales_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VentaManualEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Creado"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Venta digitada por el bombero (modo manual)",
+        "tags": [
+          "pista"
+        ]
+      }
+    }
+  }
+}

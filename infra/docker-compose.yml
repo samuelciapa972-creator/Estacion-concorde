@@ -1,0 +1,102 @@
+# Banco de pruebas completo: `make stack` (o `docker compose --project-directory . -f infra/docker-compose.yml up`).
+#   db      PostgreSQL 16
+#   migrar  aplica las migraciones (alembic upgrade head) y termina; la API y el worker esperan a que acabe
+#   api     FastAPI (no se publica: solo la ve Caddy)
+#   worker  cola de envíos con el proveedor SIMULADO (nada sale a la DIAN)
+#   web     Caddy: HTTPS local, la PWA y /api -> api
+#   simulador (perfil "simulador"): un despacho cada 20 s. `make stack-simulador`
+# Variables: .env en la raíz del repositorio (ver .env.example). Sin JWT_SECRETO la API NO arranca, a propósito.
+# Nombre propio del proyecto: no reutiliza el volumen `estacion_pgdata` de versiones anteriores.
+name: estacion-banco
+
+x-backend: &backend
+  build: ./backend
+  image: estacion-backend:dev
+  restart: unless-stopped
+  environment: &entorno-backend
+    DATABASE_URL: postgresql://estacion:${POSTGRES_PASSWORD:-estacion}@db:5432/estacion
+    TZ: America/Bogota
+  depends_on:
+    migrar:
+      condition: service_completed_successfully
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: estacion
+      # Solo desarrollo local. Cualquier otro ambiente define su propia clave en el .env.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-estacion}
+      POSTGRES_DB: estacion
+      TZ: America/Bogota
+    # Solo en este equipo (las pruebas y `make api` lo usan); nunca expuesto a la red.
+    ports: ["127.0.0.1:5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U estacion -d estacion"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrar:
+    <<: *backend
+    restart: "no"
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    environment:
+      <<: *entorno-backend
+      JWT_SECRETO: ${JWT_SECRETO:-}
+      JWT_MINUTOS: ${JWT_MINUTOS:-60}
+      # Solo Caddy llega a la API (no tiene `ports`): se acepta su X-Forwarded-For.
+      ESTACION_PROXY_CONFIABLE: "*"
+      ESTACION_CAPTCHA_PROVEEDOR: ${ESTACION_CAPTCHA_PROVEEDOR:-}
+      ESTACION_CAPTCHA_CLAVE_SITIO: ${ESTACION_CAPTCHA_CLAVE_SITIO:-}
+      ESTACION_CAPTCHA_SECRETO: ${ESTACION_CAPTCHA_SECRETO:-}
+      DIAN_AMBIENTE: ${DIAN_AMBIENTE:-2}
+      DIAN_SOFTWARE_ID: ${DIAN_SOFTWARE_ID:-}
+      DIAN_SOFTWARE_PIN: ${DIAN_SOFTWARE_PIN:-}
+      DIAN_CLAVE_TECNICA: ${DIAN_CLAVE_TECNICA:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/salud', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "estacion.worker", "--proveedor", "simulado"]
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/caddy/Dockerfile
+    image: estacion-web:dev
+    restart: unless-stopped
+    environment:
+      ESTACION_HOST: ${ESTACION_HOST:-localhost}
+    ports:
+      - "${ESTACION_PUERTO_HTTP:-80}:80"
+      - "${ESTACION_PUERTO_HTTPS:-443}:443"
+    volumes:
+      - caddy_data:/data   # aquí vive la CA interna: borrarlo obliga a reinstalar el certificado en la tablet
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+  simulador:
+    <<: *backend
+    profiles: ["simulador"]
+    command: ["python", "-m", "estacion.simulador", "--cada", "20s"]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

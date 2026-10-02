@@ -9,6 +9,9 @@ datos/
 *.xls
 *.xlsx
 
+# Certificado raíz de la CA local de Caddy (se exporta con `make ca`; cambia por instalación)
+infra/caddy-root.crt
+
 # Python
 __pycache__/
 *.pyc

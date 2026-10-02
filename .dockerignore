@@ -1,0 +1,17 @@
+# Contexto de construcción de infra/caddy/Dockerfile (la raíz). Solo hace falta web/ e infra/caddy/.
+.git/
+**/node_modules/
+**/dist/
+**/dev-dist/
+**/.venv/
+**/__pycache__/
+backend/
+docs/
+*.xls
+*.xlsx
+.env
+.env.*
+*.pem
+*.p12
+*.pfx
+datos/

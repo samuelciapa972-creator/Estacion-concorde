@@ -5,47 +5,58 @@ Importador y normalizador de los despachos del surtidor **Speed Solutions**
 
 ## Uso
 
-Requisitos: [uv](https://docs.astral.sh/uv/) (instala Python 3.12) y Docker.
+Estructura: `backend/` (Python 3.12, FastAPI, Alembic), `web/` (React + Vite + TypeScript, PWA) e `infra/`
+(docker-compose y Caddy). Todo se maneja desde la raíz con `make` (la lista completa está al inicio del `Makefile`).
+Requisitos: [uv](https://docs.astral.sh/uv/) (instala Python 3.12), Node 22 y Docker.
 
 ```bash
-make install        # .venv con Python 3.12 y dependencias de desarrollo
-make up             # PostgreSQL 16 del docker-compose + migraciones de Alembic
-make test           # pruebas, incluidas las de integración contra ese PostgreSQL
-make lint           # ruff (lint + formato) y mypy
-make test-rapido    # sin PostgreSQL: las pruebas de integración se saltan
+make install        # backend/.venv y web/node_modules
+make up             # PostgreSQL 16 del compose + migraciones de Alembic
+make test           # backend (incluidas las de integración contra ese PostgreSQL) y web (Vitest)
+make lint           # ruff + mypy (backend), eslint + tsc + tipos del OpenAPI al día (web)
+make test-rapido    # backend sin PostgreSQL: las pruebas de integración se saltan
 
-# Informe en seco (no necesita base de datos)
-.venv/bin/python -m estacion.cli speed_solutions D260928_084701.xls
+# Desarrollo (cada uno en su terminal). La API necesita JWT_SECRETO (ver .env.example).
+make api            # http://127.0.0.1:8000/docs
+make web            # http://localhost:5173: /pista (bombero), /registro (QR público), /admin/... (administrador)
+make simulador      # surtidor SIMULADO: un despacho cada 20 s a la base de desarrollo
+make worker         # cola de envíos con el proveedor SIMULADO (nada sale a la DIAN)
+make tipos          # tras cambiar la API: regenera web/src/api/esquema.ts desde el OpenAPI
 
-# Carga a la base de desarrollo (idempotente: repetir el archivo no hace nada)
+# Usuarios (PIN con hash; se pide por consola)
+cd backend && .venv/bin/python -m estacion.usuarios crear --usuario admin1 --nombre "Admin Uno" --rol ADMIN
+
+# Importador del surtidor Speed Solutions (desde backend/)
+.venv/bin/python -m estacion.cli speed_solutions D260928_084701.xls              # informe en seco
 .venv/bin/python -m estacion.cli speed_solutions D260928_084701.xls \
-    --dsn postgresql://estacion:estacion@localhost/estacion
+    --dsn postgresql://estacion:estacion@localhost/estacion                     # carga idempotente
+ARCHIVO_REAL=D260928_084701.xls .venv/bin/python -m pytest -k real              # el archivo NUNCA va al repo
 
-# Surtidor SIMULADO (sin ningún equipo real): un despacho cada 20 s a la base de desarrollo
-make simulador                     # o: .venv/bin/python -m estacion.simulador --lado A --cada 20s
-.venv/bin/python -m estacion.simulador --cantidad 10 --cada 0 --en-seco   # solo mostrar
-make worker                        # cola de envíos con el proveedor SIMULADO (nada sale a la DIAN)
-
-# Prueba contra el export real (el archivo NUNCA va al repositorio)
-ARCHIVO_REAL=D260928_084701.xls .venv/bin/python -m pytest -k real
+# Todo en contenedores, como quedaría en el servidor de la estación (HTTPS local con Caddy)
+make stack          # o make stack-simulador; ver docs/despliegue.md
 ```
 
 ## Estructura
 
-| Archivo | Qué hace |
+| Ruta | Qué hace |
 |---|---|
-| `migrations/` | Esquema PostgreSQL (Alembic): 0001 despachos y catálogos, 0002 facturación, 0003 simulador y "una factura por venta" con venta manual enlazada |
-| `parsers/speed_solutions.py` | XML → `Despacho` normalizado (streaming; fila dañada se rechaza, archivo truncado aborta todo) |
+| `backend/migrations/` | Esquema PostgreSQL (Alembic): 0001 despachos y catálogos, 0002 facturación, 0003 simulador y "una factura por venta" con venta manual enlazada |
+| `backend/src/estacion/parsers/speed_solutions.py` | XML → `Despacho` normalizado (streaming; fila dañada se rechaza, archivo truncado aborta todo) |
 | `normalizacion.py` | Placa (válida / sin dato / nombre de equipo), kilometraje, forma de pago |
 | `calidad.py` | Duplicados, fechas malas del reloj, valor vs volumen, continuidad de contadores, crédito sin placa, turnos |
 | `carga.py` | Carga transaccional e idempotente a PostgreSQL; continuidad de contadores también contra lo ya guardado |
 | `surtidores/` | `FuenteDespachos` (leer/confirmar), `ArchivoSpeedSolutions`, `SimuladorSurtidor` e `ingesta` (calidad + carga) |
 | `simulador.py` | Comando del simulador; retoma ids, turno y contadores de la corrida anterior |
-| `servicios/` | Numeración atómica, emisión (`solicitar`), cola de envíos (`outbox`), ventas manuales, pendientes y enlace venta manual ↔ despacho |
+| `servicios/` | Numeración atómica, emisión, cola de envíos (`outbox`), ventas manuales y pendientes, clientes, vehículos, consulta de ventas, reportes desde la base e importación CSV |
 | `worker.py` | Procesa la cola de envíos (hoy solo con el proveedor simulado) |
-| `reportes.py` | Excel de ventas (Diario, Mensual, Turnos, Datos, Alertas): `python -m estacion.reportes speed_solutions archivo.xls -o reporte.xlsx` |
-| `facturacion/` | Interfaz `ProveedorFacturacion`, proveedor simulado y validación de clientes. **Contexto, plan y reglas: ver `CLAUDE.md`** |
-| `facturacion/xml_factura.py` | Generador del XML de factura electrónica (UBL 2.1 DIAN) **sin firma**, caso acotado; su estructura coincide con una factura real validada. CUFE sin verificar. |
+| `api/` | FastAPI: ingreso por PIN (JWT corto, bloqueo por intentos), pista, clientes, facturas, reportes, administración y registro público por QR (límite de tasa y captcha opcional) |
+| `usuarios.py` | Crear usuarios, cambiar PIN, desbloquear y desactivar (`python -m estacion.usuarios`) |
+| `reportes.py` | Excel de ventas (Diario, Mensual, Turnos, Datos, Alertas) |
+| `facturacion/` | Interfaz `ProveedorFacturacion`, proveedor simulado, validación de clientes y generador del XML (UBL 2.1) **sin firma**, caso acotado. CUFE sin verificar. **Contexto, plan y reglas: ver `CLAUDE.md`** |
+| `web/src/paginas/bombero/` | Pendientes, venta manual, cliente (con registro rápido y autorización), pago, resumen, emitir y estado |
+| `web/src/paginas/publico/` | Autorregistro por QR |
+| `web/src/paginas/admin/` | Búsqueda de ventas (filtros de Nexus, totales por manguera), reportes con Excel, clientes y vehículos (baja lógica, importación CSV) y anomalías |
+| `infra/` | `docker-compose.yml` (db, migraciones, api, worker, Caddy, simulador) y Caddy (HTTPS local + PWA + `/api`) |
 
 ## Hallazgos en el export real (4.095 despachos, 4-jul a 28-sep-2026)
 
@@ -68,7 +79,7 @@ ARCHIVO_REAL=D260928_084701.xls .venv/bin/python -m pytest -k real
 
 ## Límites conocidos
 
-- `carga.py` y `schema.sql` ya corren contra PostgreSQL 16 (`tests/test_carga_pg.py`: archivo repetido,
+- `carga.py` y las migraciones ya corren contra PostgreSQL 16 (`backend/tests/test_carga_pg.py`: archivo repetido,
   ventanas solapadas, conflicto de contenido, atomicidad, turnos). El export real cargó 4.095 despachos.
 - La corrección de fechas elige el bloque "bueno" por tamaño. Con ventanas muy pequeñas puede elegir mal;
   en ese caso no inventa nada y deja la anomalía en severidad ALTA. Mejora prevista: anclar a los últimos
