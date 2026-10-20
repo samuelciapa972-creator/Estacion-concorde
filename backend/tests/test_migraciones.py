@@ -31,6 +31,7 @@ TABLAS_NUEVAS = {
     "auditoria",
     "entrega",
     "entrega_consecutivo",
+    "numeracion_nota",
 }
 TABLAS_INICIALES = {
     "surtidor", "producto", "importacion", "turno", "cliente", "vehiculo", "despacho", "anomalia", "fila_rechazada",
@@ -46,7 +47,7 @@ def test_upgrade_desde_cero_downgrade_a_base_y_otra_vez_upgrade(esquema_vacio):
     bd = esquema_vacio
     migrar(bd.dsn)
     assert tablas(bd) == TABLAS_INICIALES | TABLAS_NUEVAS | {"alembic_version"}
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0006"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0007"
 
     migrar(bd.dsn, "base", bajar=True)
     assert tablas(bd) == {"alembic_version"}
@@ -57,7 +58,7 @@ def test_upgrade_desde_cero_downgrade_a_base_y_otra_vez_upgrade(esquema_vacio):
     ) == 0  # fmt: skip
 
     migrar(bd.dsn)
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0006"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0007"
 
 
 def test_bajar_la_0004_deja_las_vistas_de_ventas_sin_origen(esquema_vacio):
@@ -146,7 +147,7 @@ def factura(e: dict[str, Any], **cambios: Any) -> int:
     campos = dict(
         clave_emision=uuid.uuid4().hex, despacho_id=e["despacho"], cliente_id=e["cliente"], usuario_id=e["usuario"],
         numeracion_id=e["numeracion"], prefijo="SETP", consecutivo=1, forma_pago="CONTADO", medio_pago="EFECTIVO",
-        total=29757, fecha_emision="2026-09-30 10:05",
+        total=29757, fecha_emision="2026-09-30 10:05", ambiente="2",
     )  # fmt: skip
     return e["datos"].insertar("factura", **{**campos, **cambios})
 
@@ -400,3 +401,20 @@ def test_bajar_la_0006_quita_el_track_id(esquema_vacio):
     migrar(esquema_vacio.dsn)
     migrar(esquema_vacio.dsn, "0005", bajar=True)
     assert _columna_track(esquema_vacio) == 0
+
+
+# ------------------------------------------------------------------------------------------ 0007: producción y notas
+def test_bajar_la_0007_deja_la_0006(esquema_vacio):
+    bd = esquema_vacio
+    migrar(bd.dsn)
+    migrar(bd.dsn, "0006", bajar=True)
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0006"
+    assert "numeracion_nota" not in tablas(bd)
+    columnas = {f[0] for f in bd.consultar(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = 'factura'",
+        (bd.esquema,))}  # fmt: skip
+    assert not {"tipo", "referencia_id", "motivo", "ambiente"} & columnas
+    vistas = {f[0] for f in bd.consultar("SELECT viewname FROM pg_views WHERE schemaname = %s", (bd.esquema,))}
+    assert {"v_ventas_origen", "v_ventas_diarias", "v_ventas_mensuales"} <= vistas
+    migrar(bd.dsn)
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0007"

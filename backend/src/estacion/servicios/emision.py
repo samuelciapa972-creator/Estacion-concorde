@@ -261,23 +261,23 @@ class ServicioEmision:
                 factura_id = conn.execute(
                     f"""INSERT INTO factura (clave_emision, {columna}, cliente_id, usuario_id, numeracion_id,
                                              prefijo, consecutivo, forma_pago, medio_pago, total, fecha_emision,
-                                             cufe, xml_sin_firmar)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                             cufe, xml_sin_firmar, ambiente)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
                     (clave, origen.id, cliente_id, usuario_id, asignado.numeracion_id, asignado.prefijo,
                      asignado.consecutivo, datos.forma_pago, medio_pago, solicitud.total, fecha, xml.cufe,
-                     xml_texto),
+                     xml_texto, config.software.ambiente),
                 ).fetchone()[0]  # type: ignore[index]  # fmt: skip
                 accion = "FACTURA_SOLICITADA"
             else:
                 conn.execute(
                     """UPDATE factura SET clave_emision = %s, estado = 'EN_PROCESO', cliente_id = %s,
                               usuario_id = %s, forma_pago = %s, medio_pago = %s, total = %s, fecha_emision = %s,
-                              cufe = %s, xml_sin_firmar = %s, xml_firmado = NULL, respuesta_dian = NULL,
+                              cufe = %s, xml_sin_firmar = %s, ambiente = %s, xml_firmado = NULL, respuesta_dian = NULL,
                               application_response = NULL, dian_track_id = NULL,
                               error = NULL, actualizada_en = now()
                        WHERE id = %s""",
                     (clave, cliente_id, usuario_id, datos.forma_pago, medio_pago, solicitud.total, fecha, xml.cufe,
-                     xml_texto, factura_id),
+                     xml_texto, config.software.ambiente, factura_id),
                 )  # fmt: skip
                 accion = "FACTURA_REENVIADA"
             conn.execute(

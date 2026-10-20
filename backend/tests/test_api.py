@@ -28,7 +28,7 @@ pytestmark = pytest.mark.bd
 
 # ------------------------------------------------------------------------------------------ arranque y salud
 def test_salud(api):
-    assert api.get("/salud").json() == {"estado": "ok", "base_de_datos": "ok", "migracion": "0006"}
+    assert api.get("/salud").json() == {"estado": "ok", "base_de_datos": "ok", "migracion": "0007"}
 
 
 def test_salud_con_la_base_sin_migraciones(esquema_vacio):

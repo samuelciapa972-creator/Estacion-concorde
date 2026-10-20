@@ -211,7 +211,7 @@ def test_la_base_impide_la_factura_del_despacho_y_de_su_venta_manual(escenario):
     venta = d.venta_manual(escenario.usuario, despacho_id=despacho)
     comunes = dict(
         cliente_id=escenario.cliente, usuario_id=escenario.usuario, numeracion_id=escenario.numeracion,
-        prefijo="SETP", forma_pago="CONTADO", medio_pago="EFECTIVO", total=1, fecha_emision=AHORA,
+        prefijo="SETP", forma_pago="CONTADO", medio_pago="EFECTIVO", total=1, fecha_emision=AHORA, ambiente="2",
     )  # fmt: skip
     d.insertar("factura", clave_emision=uuid.uuid4().hex, venta_manual_id=venta, consecutivo=1, **comunes)
     with pytest.raises(errors.UniqueViolation, match="ya tiene factura"):
