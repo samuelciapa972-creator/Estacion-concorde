@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<CreditNote xmlns="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
+            xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+            xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+            xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+            xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
+            xmlns:sts="dian:gov:co:facturaelectronica:Structures-2"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+         
+    <ext:UBLExtensions>
+        <!-- Extensión reservada para la firma digital XAdES-EPES -->
+        <ext:UBLExtension>
+            <ext:ExtensionContent/>
+        </ext:UBLExtension>
+    </ext:UBLExtensions>
+
+    <cbc:UBLVersionID>UBL 2.1</cbc:UBLVersionID>
+    <cbc:CustomizationID>20</cbc:CustomizationID> <!-- 20: Nota Crédito -->
+    <cbc:ProfileID>DIAN 2.1: Nota Crédito de Factura Electrónica de Venta</cbc:ProfileID>
+    <cbc:ProfileExecutionID>{{ tipo_ambiente }}</cbc:ProfileExecutionID> <!-- 1: Producción, 2: Pruebas -->
+    <cbc:ID>{{ numero_nota }}</cbc:ID>
+    <cbc:UUID schemeID="{{ tipo_ambiente }}" schemeName="CUDE-SHA384">{{ cude }}</cbc:UUID>
+    <cbc:IssueDate>{{ fecha_emision }}</cbc:IssueDate>
+    <cbc:IssueTime>{{ hora_emision }}</cbc:IssueTime>
+    <cbc:CreditNoteTypeCode>91</cbc:CreditNoteTypeCode> <!-- 91: Nota Crédito Estándar -->
+    <cbc:DocumentCurrencyCode>COP</cbc:DocumentCurrencyCode>
+    <cbc:LineCountNumeric>{{ lineas | length }}</cbc:LineCountNumeric>
+
+    <!-- Documento de Referencia (Factura que se está anulando o ajustando) -->
+    <cac:BillingReference>
+        <cac:InvoiceDocumentReference>
+            <cbc:ID>{{ factura_referencia.numero }}</cbc:ID>
+            <cbc:UUID schemeName="CUFE-SHA384">{{ factura_referencia.cufe }}</cbc:UUID>
+            <cbc:IssueDate>{{ factura_referencia.fecha }}</cbc:IssueDate>
+        </cac:InvoiceDocumentReference>
+    </cac:BillingReference>
+
+    <!-- Concepto de Corrección / Anulación -->
+    <cac:DiscrepancyResponse>
+        <cbc:ReferenceID>{{ factura_referencia.numero }}</cbc:ReferenceID>
+        <cbc:ResponseCode>{{ concepto_codigo }}</cbc:ResponseCode> <!-- 2: Anulación de factura electrónica -->
+        <cbc:Description>{{ concepto_descripcion }}</cbc:Description>
+    </cac:DiscrepancyResponse>
+
+    <!-- Datos del Emisor (EDS Concorde) -->
+    <cac:AccountingSupplierParty>
+        <cbc:AdditionalAccountID>1</cbc:AdditionalAccountID>
+        <cac:Party>
+            <cac:PartyName>
+                <cbc:Name>{{ emisor.razon_social }}</cbc:Name>
+            </cac:PartyName>
+            <cac:PhysicalLocation>
+                <cac:Address>
+                    <cbc:ID>{{ emisor.codigo_municipio }}</cbc:ID>
+                    <cbc:CityName>{{ emisor.municipio }}</cbc:CityName>
+                    <cbc:CountrySubentity>{{ emisor.departamento }}</cbc:CountrySubentity>
+                    <cac:AddressLine>
+                        <cbc:Line>{{ emisor.direccion }}</cbc:Line>
+                    </cac:AddressLine>
+                    <cac:Country>
+                        <cbc:IdentificationCode>CO</cbc:IdentificationCode>
+                    </cac:Country>
+                </cac:Address>
+            </cac:PhysicalLocation>
+            <cac:PartyTaxScheme>
+                <cbc:RegistrationName>{{ emisor.razon_social }}</cbc:RegistrationName>
+                <cbc:CompanyID schemeID="{{ emisor.dv }}" schemeName="31">{{ emisor.nit }}</cbc:CompanyID>
+                <cbc:TaxLevelCode>R-99-PN</cbc:TaxLevelCode>
+                <cac:TaxScheme>
+                    <cbc:ID>01</cbc:ID>
+                    <cbc:Name>IVA</cbc:Name>
+                </cac:TaxScheme>
+            </cac:PartyTaxScheme>
+        </cac:Party>
+    </cac:AccountingSupplierParty>
+
+    <!-- Datos del Cliente / Adquirente -->
+    <cac:AccountingCustomerParty>
+        <cbc:AdditionalAccountID>{{ cliente.tipo_persona }}</cbc:AdditionalAccountID>
+        <cac:Party>
+            <cac:PartyName>
+                <cbc:Name>{{ cliente.nombre }}</cbc:Name>
+            </cac:PartyName>
+            <cac:PartyTaxScheme>
+                <cbc:RegistrationName>{{ cliente.nombre }}</cbc:RegistrationName>
+                <cbc:CompanyID schemeName="{{ cliente.tipo_doc }}">{{ cliente.numero_doc }}</cbc:CompanyID>
+                <cbc:TaxLevelCode>R-99-PN</cbc:TaxLevelCode>
+                <cac:TaxScheme>
+                    <cbc:ID>01</cbc:ID>
+                    <cbc:Name>IVA</cbc:Name>
+                </cac:TaxScheme>
+            </cac:PartyTaxScheme>
+        </cac:Party>
+    </cac:AccountingCustomerParty>
+
+    <!-- Impuestos Totales -->
+    <cac:TaxTotal>
+        <cbc:TaxAmount currencyID="COP">{{ total_impuestos | round(2) }}</cbc:TaxAmount>
+        {% for imp in resumen_impuestos %}
+        <cac:TaxSubtotal>
+            <cbc:TaxableAmount currencyID="COP">{{ imp.base | round(2) }}</cbc:TaxableAmount>
+            <cbc:TaxAmount currencyID="COP">{{ imp.monto | round(2) }}</cbc:TaxAmount>
+            <cac:TaxScheme>
+                <cbc:ID>{{ imp.codigo }}</cbc:ID>
+                <cbc:Name>{{ imp.nombre }}</cbc:Name>
+            </cac:TaxScheme>
+        </cac:TaxSubtotal>
+        {% endfor %}
+    </cac:TaxTotal>
+
+    <!-- Totales Monetarios -->
+    <cac:LegalMonetaryTotal>
+        <cbc:LineExtensionAmount currencyID="COP">{{ subtotal | round(2) }}</cbc:LineExtensionAmount>
+        <cbc:TaxExclusiveAmount currencyID="COP">{{ subtotal | round(2) }}</cbc:TaxExclusiveAmount>
+        <cbc:TaxInclusiveAmount currencyID="COP">{{ total_pagar | round(2) }}</cbc:TaxInclusiveAmount>
+        <cbc:PayableAmount currencyID="COP">{{ total_pagar | round(2) }}</cbc:PayableAmount>
+    </cac:LegalMonetaryTotal>
+
+    <!-- Líneas de Ítems Afectados -->
+    {% for item in lineas %}
+    <cac:CreditNoteLine>
+        <cbc:ID>{{ loop.index }}</cbc:ID>
+        <cbc:CreditedQuantity unitCode="GLL">{{ item.galones | round(3) }}</cbc:CreditedQuantity>
+        <cbc:LineExtensionAmount currencyID="COP">{{ item.subtotal | round(2) }}</cbc:LineExtensionAmount>
+        <cac:Item>
+            <cbc:Description>{{ item.descripcion }}</cbc:Description>
+            <cac:StandardItemIdentification>
+                <cbc:ID schemeID="999">{{ item.codigo_producto }}</cbc:ID>
+            </cac:StandardItemIdentification>
+        </cac:Item>
+        <cac:Price>
+            <cbc:PriceAmount currencyID="COP">{{ item.precio_unitario | round(2) }}</cbc:PriceAmount>
+            <cbc:BaseQuantity unitCode="GLL">1.000</cbc:BaseQuantity>
+        </cac:Price>
+    </cac:CreditNoteLine>
+    {% endfor %}
+
+</CreditNote>
