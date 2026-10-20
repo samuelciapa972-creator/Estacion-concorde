@@ -1,0 +1,176 @@
+/*
+ * Movimiento y estados de interacción. Los estilos de cada pantalla siguen en línea (estilos.js); aquí solo va lo
+ * que el estilo en línea no puede expresar: hover, foco, presión, animaciones de entrada e indicadores que se deslizan.
+ * Regla: solo se animan transform y opacity (salvo los colores del cambio de tema), siempre con salida suave.
+ */
+:root {
+  --curva-salida: cubic-bezier(0.23, 1, 0.32, 1);
+  --curva-mover: cubic-bezier(0.77, 0, 0.175, 1);
+  --t-presion: 120ms;
+  --t-rapido: 160ms;
+  --t-entrada: 240ms;
+  --t-deslizar: 280ms;
+}
+
+/* ------------------------------------------------------------------ cambio de tema (solo mientras ocurre) */
+.tema-cambiando,
+.tema-cambiando * {
+  transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease, box-shadow 220ms ease !important;
+}
+
+/* ------------------------------------------------------------------ foco y presión (todas las pantallas) */
+:focus-visible {
+  outline: 2px solid var(--anillo);
+  outline-offset: 2px;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 0;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform var(--t-presion) var(--curva-salida),
+    box-shadow var(--t-rapido) ease,
+    opacity var(--t-rapido) ease,
+    color var(--t-rapido) ease;
+}
+/* Confirmación táctil: en la tablet de pista el bombero necesita sentir que el toque llegó. */
+button:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* Hover por variante: el estilo en línea fija fondo y borde, así que el realce va por sombra. */
+.boton--primario:not(:disabled):hover {
+  opacity: 0.86;
+}
+.boton--secundario:not(:disabled):hover,
+.boton--chico:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px var(--text-secondary);
+}
+.boton--peligro:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+.enlace:hover {
+  color: var(--text-primary) !important;
+}
+
+/* ------------------------------------------------------------------ entrada de vistas y pasos */
+@keyframes entra-vista {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.vista {
+  animation: entra-vista var(--t-entrada) var(--curva-salida) backwards;
+}
+
+@keyframes entra-aviso {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.aviso {
+  animation: entra-aviso 200ms var(--curva-salida) backwards;
+}
+
+/* PIN equivocado: un temblor corto, como un "no" con la cabeza. */
+@keyframes sacudir {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+.aviso--sacudir {
+  animation: entra-aviso 200ms var(--curva-salida) backwards, sacudir 320ms var(--curva-mover) 60ms;
+}
+
+/* ------------------------------------------------------------------ tablas */
+@keyframes entra-fila {
+  from {
+    opacity: 0;
+  }
+}
+.tabla tbody tr {
+  transition: background-color var(--t-rapido) ease;
+}
+.tabla tbody tr:hover {
+  background-color: var(--fila-encima);
+}
+
+/* ------------------------------------------------------------------ cargando: esqueleto que respira */
+@keyframes respirar {
+  50% {
+    opacity: 0.45;
+  }
+}
+.esqueleto {
+  height: 10px;
+  border-radius: 3px;
+  background: var(--esqueleto);
+  animation: respirar 1400ms ease-in-out infinite;
+}
+.esqueleto + .esqueleto {
+  margin-top: 14px;
+}
+.esqueleto:nth-child(3) { animation-delay: 120ms; }
+.esqueleto:nth-child(4) { animation-delay: 240ms; }
+.esqueleto:nth-child(5) { animation-delay: 360ms; }
+
+.solo-lectores {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ indicador que se desliza (pestañas, segmentado, barra lateral) */
+.indicador {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.indicador[data-listo] {
+  opacity: 1;
+  transition:
+    transform var(--t-deslizar) var(--curva-salida),
+    width var(--t-deslizar) var(--curva-salida),
+    height var(--t-deslizar) var(--curva-salida);
+}
+
+/* Despacho recién llegado: pasa el resaltador amarillo y se va secando. */
+@keyframes resaltar {
+  from {
+    background-color: var(--resaltador);
+  }
+}
+.surtidor--nuevo {
+  animation: resaltar 3s ease-out;
+}
+
+/* ------------------------------------------------------------------ menos movimiento: quedan solo los fundidos */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes entra-vista { from { opacity: 0; } }
+  @keyframes entra-aviso { from { opacity: 0; } }
+  @keyframes entra-fila { from { opacity: 0; } }
+  @keyframes sacudir { from, to { transform: none; } }
+  button:not(:disabled):active {
+    transform: none;
+  }
+  .indicador[data-listo] {
+    transition: none;
+  }
+  .esqueleto,
+  .surtidor--nuevo {
+    animation: none;
+  }
+}

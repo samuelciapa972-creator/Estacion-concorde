@@ -1,0 +1,694 @@
+/*
+ * Disposición "consola de pista" con carácter de planilla: papel, tinta y reglas finas.
+ * - Profundidad por líneas (1px --border-color; regla fuerte en encabezados), no por sombras.
+ * - Radios cortos: 4 controles · 6 paneles. Texto en mayúscula normal; las cifras con dígitos de ancho fijo.
+ * - Lo único oscuro es el display del surtidor; lo único amarillo, la placa (como en la calle) y el resaltador.
+ * Cortes: 1100px (menú lateral compacto), 900px (formularios y login), 640px (celular: menú abajo).
+ */
+
+/* ================================================================== consola */
+.consola {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 100vh;
+}
+.consola--sin-riel {
+  grid-template-columns: minmax(0, 1fr);
+}
+.consola__cuerpo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.consola__contenido {
+  flex: 1;
+  padding-bottom: 40px;
+}
+
+/* ------------------------------------------------------------------ menú lateral */
+.riel {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 18px 0 18px 16px;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-main);
+}
+.riel__marca {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.riel__logo {
+  height: 26px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+.riel__nav {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.riel__grupo {
+  margin: 18px 0 6px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.riel__indicador + .riel__grupo {
+  margin-top: 0;
+}
+/* La opción activa se marca con una regla de tinta al borde, como un separador de libro. */
+.riel__indicador {
+  max-width: 2px;
+  background: var(--text-primary);
+}
+.riel__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.riel__item:hover,
+.riel__item[aria-current='page'] {
+  color: var(--text-primary);
+}
+.riel__item[aria-current='page'] {
+  font-weight: 600;
+}
+.riel__item svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+.riel__corto {
+  display: none;
+}
+.riel__pie {
+  margin-top: auto;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.riel__pie em {
+  display: block;
+}
+
+/* ------------------------------------------------------------------ barra superior */
+.barra-superior {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 56px;
+  padding: 0 32px;
+  background: var(--barra-fondo);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border-color);
+}
+.barra-superior__estacion {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.barra-superior__logo {
+  display: none;
+  height: 24px;
+  width: auto;
+}
+.consola--sin-riel .barra-superior__logo {
+  display: block;
+}
+.barra-superior__nombre {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.barra-superior__nombre span {
+  color: var(--text-secondary);
+}
+.barra-superior__acciones {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.barra-superior__reloj {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 0 8px;
+}
+.barra-superior__usuario {
+  padding: 0 12px;
+  border-left: 1px solid var(--border-color);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.barra-superior__usuario small {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.boton-icono {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.boton-icono:hover {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+/* ------------------------------------------------------------------ página y subsecciones */
+.pagina {
+  padding: 28px 32px;
+}
+.secciones {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.secciones::-webkit-scrollbar {
+  display: none;
+}
+.secciones__indicador {
+  top: auto;
+  bottom: 0;
+  height: 2px;
+  background: var(--text-primary);
+}
+.secciones__item {
+  position: relative;
+  padding: 10px 12px 12px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.secciones__item:hover,
+.secciones__item[aria-current='page'] {
+  color: var(--text-primary);
+}
+.secciones__item[aria-current='page'] {
+  font-weight: 600;
+}
+.secciones__item:focus-visible {
+  outline-offset: -2px;
+}
+
+.rejilla-indicadores {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+/* ================================================================== pista (POS) */
+.pista {
+  display: grid;
+  grid-template-columns: repeat(var(--lados, 2), minmax(0, 1fr));
+  gap: 32px;
+  align-items: start;
+}
+.pista__lado-titulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  margin-bottom: 14px;
+  border-bottom: 1.5px solid var(--regla-fuerte);
+  font-size: 15px;
+  font-weight: 700;
+}
+.pista__lado-titulo span {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.pista__tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.pista__vacio {
+  padding: 20px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.surtidor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  transition: border-color var(--t-rapido) ease;
+}
+.surtidor:hover {
+  border-color: #b9b09c;
+}
+[data-theme='dark'] .surtidor:hover {
+  border-color: #4a463e;
+}
+.surtidor__cabeza {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.surtidor__producto {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+/* El display: la pantalla del surtidor. Oscuro, plano, con los dígitos claros. */
+.display {
+  padding: 12px 14px;
+  border-radius: 4px;
+  background: var(--display-fondo);
+  box-shadow: inset 0 0 0 1px var(--display-borde);
+  color: #f4f0e6;
+}
+.display__etiqueta {
+  display: block;
+  font-size: 11px;
+  color: rgba(244, 240, 230, 0.55);
+}
+.display__monto {
+  display: block;
+  margin-top: 2px;
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.display__fila {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(244, 240, 230, 0.65);
+  font-variant-numeric: tabular-nums;
+}
+.surtidor__pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+/* Placa colombiana: amarilla, borde negro. */
+.placa {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1.5px solid #1b1a17;
+  border-radius: 3px;
+  background: #f2c94c;
+  color: #1b1a17;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+}
+.placa--sin {
+  border: 1px dashed var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.placa--chica {
+  padding: 0 5px;
+  font-size: 11px;
+}
+
+/* ================================================================== ventas (búsqueda) */
+.ventas__busqueda {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(190px, 1.1fr) minmax(190px, 1.1fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+.ventas__acciones {
+  display: flex;
+  gap: 8px;
+}
+.giro {
+  transition: transform var(--t-rapido) var(--curva-salida);
+}
+.giro--abierto {
+  transform: rotate(180deg);
+}
+.fichas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -6px 0 20px;
+}
+.ficha {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ficha svg {
+  color: var(--text-secondary);
+}
+.ficha:hover {
+  border-color: var(--text-secondary);
+}
+.ventas__resumen {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.75fr) minmax(0, 1.6fr);
+  gap: 12px;
+  align-items: stretch;
+}
+.ventas__total {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  border-radius: 6px;
+}
+.mezcla {
+  margin-top: 20px;
+}
+.mezcla__barra {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  margin: 8px 0 10px;
+}
+.mezcla__barra span {
+  min-width: 4px;
+}
+.mezcla__rotulos {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 12px;
+  color: rgba(244, 240, 230, 0.7);
+}
+.mezcla__rotulos li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mezcla__rotulos i {
+  width: 8px;
+  height: 8px;
+}
+.mezcla__rotulos b {
+  color: #f4f0e6;
+  font-variant-numeric: tabular-nums;
+}
+.ventas__cifras {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(244, 240, 230, 0.12);
+}
+.ventas__cifras strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 16px;
+}
+.ventas__subtitulo {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.mangueras {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+.manguera__fila {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.manguera__valor {
+  font-variant-numeric: tabular-nums;
+}
+.manguera__pista {
+  height: 6px;
+  margin: 6px 0 4px;
+  background: var(--bg-input);
+}
+.manguera__barra {
+  display: block;
+  height: 100%;
+  background: var(--text-primary);
+}
+.manguera__detalle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+/* Estado: un punto y el texto, sin pastilla. */
+.estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.estado i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ================================================================== ingreso (login) */
+.ingreso {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(400px, 0.85fr);
+  min-height: 100vh;
+}
+.ingreso__foto {
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+.ingreso__foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 30% center;
+  filter: grayscale(1) sepia(0.15) contrast(1.05);
+  opacity: 0.85;
+}
+.ingreso__foto::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.8) 100%);
+}
+.ingreso__lema {
+  position: absolute;
+  z-index: 1;
+  left: 40px;
+  right: 40px;
+  bottom: 36px;
+  color: #f4f0e6;
+}
+.ingreso__lema strong {
+  display: block;
+  font-size: 20px;
+  font-style: italic;
+  font-weight: 600;
+}
+.ingreso__lema span {
+  font-size: 13px;
+  opacity: 0.75;
+}
+.ingreso__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+}
+
+/* ================================================================== tablet */
+@media (max-width: 1100px) {
+  .consola {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+  .consola--sin-riel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .riel {
+    padding: 18px 0 18px 6px;
+  }
+  .riel__marca {
+    justify-content: center;
+    padding: 0;
+  }
+  .riel__logo {
+    width: 30px;
+    height: 30px;
+    object-fit: cover;
+    object-position: left center;
+  }
+  .riel__item {
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px 2px;
+    font-size: 11px;
+    text-align: center;
+  }
+  .riel__texto,
+  .riel__pie,
+  .riel__grupo {
+    display: none;
+  }
+  .riel__corto {
+    display: block;
+  }
+}
+
+@media (max-width: 900px) {
+  .ingreso {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ingreso__foto {
+    display: none;
+  }
+  .pista,
+  .ventas__resumen {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ventas__busqueda {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ventas__acciones {
+    grid-column: 1 / -1;
+  }
+  .barra-superior__nombre span {
+    display: none;
+  }
+}
+
+/* ================================================================== celular: menú abajo */
+@media (max-width: 640px) {
+  .consola {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .riel {
+    position: fixed;
+    z-index: 20;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: auto;
+    flex-direction: row;
+    padding: 0 4px env(safe-area-inset-bottom);
+    border-right: none;
+    border-top: 1px solid var(--border-color);
+    background: var(--barra-fondo);
+    backdrop-filter: blur(8px);
+  }
+  .riel__marca {
+    display: none;
+  }
+  .riel__nav {
+    flex: 1;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  /* En la barra de abajo la regla va encima de la opción activa. */
+  .riel__indicador {
+    max-width: none;
+    max-height: 2px;
+  }
+  .riel__item {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 2px 8px;
+  }
+  .consola__contenido {
+    padding-bottom: 96px;
+  }
+  .barra-superior {
+    padding: 0 10px 0 16px;
+  }
+  .barra-superior__logo {
+    display: block;
+  }
+  .barra-superior__nombre,
+  .barra-superior__usuario {
+    display: none;
+  }
+  .pagina {
+    padding: 20px 16px;
+  }
+  .rejilla-indicadores {
+    grid-template-columns: 1fr;
+  }
+  /* Las rejillas de formulario reciben sus columnas en línea (prop `columnas`): en celular, una sola. */
+  .rejilla {
+    grid-template-columns: 1fr !important;
+  }
+  .segmentado button {
+    min-height: 36px;
+  }
+  .pista__tarjetas,
+  .ventas__busqueda {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .surtidor__pie button {
+    min-height: 44px;
+    padding-left: 22px !important;
+    padding-right: 22px !important;
+  }
+}
