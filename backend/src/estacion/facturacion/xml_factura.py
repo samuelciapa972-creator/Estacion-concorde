@@ -11,8 +11,8 @@ que la DIAN validó ("Documento validado por la DIAN", con notificaciones). La p
 `tests/test_xml_factura.py` compara las rutas de elementos y atributos contra ese modelo.
 
 SIN VERIFICAR (revisar contra el anexo técnico v1.9 y con el set de pruebas de habilitación):
-    · `calcular_cufe` y el código de seguridad del software: fórmulas escritas de memoria del anexo.
-      La DIAN rechazará el documento si están mal; el ambiente de habilitación lo dirá.
+    · El código de seguridad del software: fórmula escrita de memoria del anexo; la habilitación lo dirá.
+      (`calcular_cufe` sí está verificado: reproduce el ejemplo publicado en el Anexo Técnico.)
     · `BaseQuantity` = cantidad (igual que la factura de referencia). Otros implementadores usan 1.
     · La URL del QR de habilitación (la de producción sí sale de la factura de referencia).
     · Falta la responsabilidad fiscal del comprador (la referencia tampoco la lleva y la DIAN aceptó
@@ -113,7 +113,6 @@ def calcular_cufe(
     valor_factura: Decimal,
     valor_total: Decimal,
     nit_emisor: str,
-    tipo_doc_adquirente: str,
     num_doc_adquirente: str,
     clave_tecnica: str,
     ambiente: str,
@@ -121,16 +120,17 @@ def calcular_cufe(
     inc: Decimal = Decimal(0),
     ica: Decimal = Decimal(0),
 ) -> str:
-    """CUFE = SHA-384 de la concatenación (SIN VERIFICAR contra el anexo técnico; ver el docstring del módulo):
+    """CUFE = SHA-384 de la concatenación del Anexo Técnico (sección 11.2):
 
     NumFac + FecFac + HorFac + ValFac + 01 + ValIVA + 04 + ValINC + 03 + ValICA + ValTot
-    + NitOFE + TipAdq + NumAdq + ClTec + TipoAmbiente
-    con los valores a 2 decimales y punto decimal.
+    + NitOFE + NumAdq + ClTec + TipoAmbiente
+    con los valores a 2 decimales y punto decimal. El tipo de documento del adquirente NO va en la cadena.
+    Verificado con el ejemplo publicado en el anexo (tests/test_xml_factura.py::TestCufe).
     """
     cadena = (
         f"{numero}{fecha}{hora}{_dec2(valor_factura)}"
         f"01{_dec2(iva)}04{_dec2(inc)}03{_dec2(ica)}{_dec2(valor_total)}"
-        f"{nit_emisor}{tipo_doc_adquirente}{num_doc_adquirente}{clave_tecnica}{ambiente}"
+        f"{nit_emisor}{num_doc_adquirente}{clave_tecnica}{ambiente}"
     )
     return _sha384(cadena)
 
@@ -213,7 +213,6 @@ def construir_factura(
         valor_factura=total,
         valor_total=total,
         nit_emisor=emisor.nit,
-        tipo_doc_adquirente=tipo_doc,
         num_doc_adquirente=doc_cliente,
         clave_tecnica=numeracion.clave_tecnica,
         ambiente=software.ambiente,
@@ -297,9 +296,11 @@ def construir_factura(
     legal = _sub(parte, "cac:PartyLegalEntity")
     _sub(legal, "cbc:RegistrationName", emisor.razon_social)
     _sub(legal, "cbc:CompanyID", emisor.nit, schemeID=dv_emisor, schemeName="31", **_AGENCIA)
+    # El prefijo del punto de facturación va SIEMPRE (la DIAN rechaza sin él: reglas FAB10a/FAJ50); la matrícula
+    # mercantil es opcional.
+    registro = _sub(legal, "cac:CorporateRegistrationScheme")
+    _sub(registro, "cbc:ID", numeracion.prefijo)
     if emisor.matricula_mercantil:
-        registro = _sub(legal, "cac:CorporateRegistrationScheme")
-        _sub(registro, "cbc:ID", numeracion.prefijo)
         _sub(registro, "cbc:Name", emisor.matricula_mercantil)
     contacto = _sub(parte, "cac:Contact")
     _sub(contacto, "cbc:Telephone", emisor.telefono)

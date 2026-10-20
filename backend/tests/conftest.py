@@ -17,13 +17,45 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from lxml import etree
 
 from estacion.api import crear_app
 from estacion.api.ajustes import Ajustes
 from estacion.api.seguridad import hash_pin
+from estacion.facturacion.certificado_prueba import generar_certificado_prueba
+from estacion.facturacion.firma import Certificado
 
 RAIZ = Path(__file__).resolve().parent.parent
 HASH_PIN = "$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHQ$aGFzaGhhc2hoYXNo"  # hash de mentira, formato argon2
+XSD_UBL = Path(__file__).resolve().parent / "fixtures" / "ubl21" / "maindoc"  # esquemas oficiales OASIS
+
+
+@pytest.fixture(scope="session")
+def certificado() -> Certificado:
+    """Certificado autofirmado de PRUEBA (uno por sesión: generar la llave RSA tarda)."""
+    return generar_certificado_prueba("ESTACION DE PRUEBA S A S")
+
+
+@pytest.fixture
+def recursos(certificado):
+    """Lo que la cola necesita para firmar y entregar: certificado de prueba y correo en memoria (nada sale)."""
+    from estacion.entrega.correo import EnviadorEnMemoria
+    from estacion.servicios.outbox import Recursos
+
+    return Recursos(certificado, EnviadorEnMemoria())
+
+
+@pytest.fixture(scope="session")
+def esquema_ubl():
+    """`esquema_ubl("AttachedDocument")` -> el XSD oficial UBL 2.1 de ese documento, ya cargado."""
+    cache: dict[str, etree.XMLSchema] = {}
+
+    def cargar(nombre: str) -> etree.XMLSchema:
+        if nombre not in cache:
+            cache[nombre] = etree.XMLSchema(etree.parse(str(XSD_UBL / f"UBL-{nombre}-2.1.xsd")))
+        return cache[nombre]
+
+    return cargar
 
 
 def migrar(dsn: str, destino: str = "head", *, bajar: bool = False) -> None:

@@ -28,7 +28,7 @@ pytestmark = pytest.mark.bd
 
 # ------------------------------------------------------------------------------------------ arranque y salud
 def test_salud(api):
-    assert api.get("/salud").json() == {"estado": "ok", "base_de_datos": "ok", "migracion": "0004"}
+    assert api.get("/salud").json() == {"estado": "ok", "base_de_datos": "ok", "migracion": "0006"}
 
 
 def test_salud_con_la_base_sin_migraciones(esquema_vacio):
@@ -306,7 +306,7 @@ def pedir_factura(api: Api, despacho: int, **cambios: Any):
     return api.post("/facturas", datos, api.bombero)
 
 
-def test_emitir_y_consultar_factura(api):
+def test_emitir_y_consultar_factura(api, recursos):
     despacho = api.e.datos.despacho()
     k = clave()
     r = pedir_factura(api, despacho, clave=k)
@@ -318,17 +318,17 @@ def test_emitir_y_consultar_factura(api):
     otra_vez = pedir_factura(api, despacho, clave=k)  # doble clic
     assert otra_vez.status_code == 200 and otra_vez.json()["id"] == f["id"] and otra_vez.json()["nueva"] is False
 
-    procesar_pendientes(api.e.datos.conn, ProveedorSimulado())
+    procesar_pendientes(api.e.datos.conn, ProveedorSimulado(), recursos=recursos)
     consulta = api.get(f"/facturas/{f['id']}", api.bombero).json()
     assert consulta["estado"] == "FACTURADO" and consulta["nueva"] is None
 
 
-def test_pdf_solo_de_facturas_validadas_y_queda_en_la_auditoria(api):
+def test_pdf_solo_de_facturas_validadas_y_queda_en_la_auditoria(api, recursos):
     f = pedir_factura(api, api.e.datos.despacho()).json()
     r = api.get(f"/facturas/{f['id']}/pdf", api.bombero)
     assert r.status_code == 409 and "EN_PROCESO" in r.json()["detail"]
 
-    procesar_pendientes(api.e.datos.conn, ProveedorSimulado())
+    procesar_pendientes(api.e.datos.conn, ProveedorSimulado(), recursos=recursos)
     r = api.get(f"/facturas/{f['id']}/pdf", api.bombero)
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
     assert r.content.startswith(b"%PDF-")
@@ -467,7 +467,7 @@ def test_posibles_duplicados_solo_administrador(api):
     assert api.get("/reportes/posibles-duplicados?desde=2026-09-01&hasta=2026-09-30", api.bombero).status_code == 403
 
 
-def _ventas_para_el_contador(api: Api) -> int:
+def _ventas_para_el_contador(api: Api, recursos) -> int:
     """Despacho facturado + despacho sin factura + venta manual sin factura, todos del 30-sep. Devuelve el id de
     la factura."""
     d = api.e.datos
@@ -475,12 +475,12 @@ def _ventas_para_el_contador(api: Api) -> int:
     d.despacho()
     d.venta_manual(api.e.usuario)  # 3,120 gal, $50.000
     f = pedir_factura(api, facturado).json()
-    procesar_pendientes(d.conn, ProveedorSimulado())
+    procesar_pendientes(d.conn, ProveedorSimulado(), recursos=recursos)
     return f["id"]
 
 
-def test_exportacion_contador_excel(api):
-    _ventas_para_el_contador(api)
+def test_exportacion_contador_excel(api, recursos):
+    _ventas_para_el_contador(api, recursos)
     hoy = date.today().isoformat()
     r = api.get(f"/reportes/contador?desde=2026-09-01&hasta={hoy}&formato=xlsx", api.admin)
     assert r.status_code == 200
@@ -511,8 +511,8 @@ def test_exportacion_contador_excel(api):
     assert auditoria == [(f"2026-09-01/{hoy}", {"desde": "2026-09-01", "hasta": hoy, "formato": "xlsx"})]
 
 
-def test_exportacion_contador_csv_para_excel_en_espanol(api):
-    _ventas_para_el_contador(api)
+def test_exportacion_contador_csv_para_excel_en_espanol(api, recursos):
+    _ventas_para_el_contador(api, recursos)
     r = api.get(f"/reportes/contador?desde=2026-09-01&hasta={date.today().isoformat()}&formato=csv", api.admin)
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
     assert r.content.startswith("\ufeff".encode())  # BOM: Excel lo abre como UTF-8 (tildes bien)
@@ -540,8 +540,8 @@ def test_reporte_pdf_por_api(api):
     assert api.get(f"/reportes/pdf?tipo=anual&{rango}", api.admin).status_code == 422
 
 
-def test_exportacion_contador_pdf_queda_en_la_auditoria(api):
-    _ventas_para_el_contador(api)
+def test_exportacion_contador_pdf_queda_en_la_auditoria(api, recursos):
+    _ventas_para_el_contador(api, recursos)
     hoy = date.today().isoformat()
     r = api.get(f"/reportes/contador?desde=2026-09-01&hasta={hoy}&formato=pdf", api.admin)
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
@@ -579,7 +579,7 @@ def test_anomalias(api):
 
 
 # ------------------------------------------------------------------------------------------ flujo completo
-def test_flujo_completo_por_api_contra_el_simulador(api):
+def test_flujo_completo_por_api_contra_el_simulador(api, recursos):
     """Aceptación de la Fase 4: venta del simulador -> cliente nuevo -> emitir -> worker -> FACTURADO."""
     sim = SimuladorSurtidor(semilla=9)
     sim.despachar("B", pistola=1, galones=Decimal("4.500"), forma_pago="CONTADO")
@@ -596,7 +596,7 @@ def test_flujo_completo_por_api_contra_el_simulador(api):
     assert factura["estado"] == "EN_PROCESO" and factura["total"] == f"{venta['valor']}.00"
     assert api.cliente.get("/despachos/pendientes?lado=B", headers=cabeceras).json() == []
 
-    procesar_pendientes(api.e.datos.conn, ProveedorSimulado())  # el worker, en segundo plano
+    procesar_pendientes(api.e.datos.conn, ProveedorSimulado(), recursos=recursos)  # el worker, en segundo plano
     final = api.cliente.get(f"/facturas/{factura['id']}", headers=cabeceras).json()
     assert final["estado"] == "FACTURADO" and final["cliente"]["nombre_mostrar"] == "LUIS CARLOS ROJAS"
 

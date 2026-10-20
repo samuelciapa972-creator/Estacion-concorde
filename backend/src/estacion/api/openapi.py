@@ -1,4 +1,4 @@
-"""Esquema OpenAPI de la API, sin base de datos ni secretos: `python -m estacion.api.openapi > web/openapi.json`.
+"""Esquema OpenAPI de la API, sin base de datos ni secretos: `python -m estacion.api.openapi > Frontend/openapi.json`.
 
 El frontend genera sus tipos de TypeScript desde ese archivo (`make tipos`). La prueba `test_openapi_al_dia`
 falla si el archivo del frontend quedó viejo respecto a la API.

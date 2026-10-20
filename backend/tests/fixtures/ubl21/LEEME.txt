@@ -1,0 +1,2 @@
+Esquemas oficiales UBL 2.1 (OASIS, https://docs.oasis-open.org/ubl/os-UBL-2.1/UBL-2.1.zip), solo los que usan las pruebas.
+No se modifican: validan que el XML generado cumple el estándar.

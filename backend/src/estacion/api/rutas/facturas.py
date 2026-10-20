@@ -6,13 +6,15 @@ from __future__ import annotations
 from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from psycopg import errors
 
-from ...facturacion.representacion import RepresentacionInvalida, generar_pdf, leer_xml
-from ...servicios import clientes
-from ...servicios._bd import auditar
+from ...facturacion.modelos import EstadoEntrega, TipoTrabajo
+from ...facturacion.representacion import RepresentacionInvalida, generar_pdf, leer_xml, texto_validacion
+from ...servicios import clientes, entrega
+from ...servicios._bd import auditar, encolar, exigir_autocommit
 from ...servicios.emision import Origen
-from ..dependencias import Conn, SesionActual
-from ..esquemas import ClienteFactura, Error, FacturaEntrada, FacturaSalida, TipoDocumento
+from ..dependencias import Conn, SesionActual, SesionAdmin
+from ..esquemas import ClienteFactura, EntregaSalida, Error, FacturaEntrada, FacturaSalida, TipoDocumento
 
 router = APIRouter(prefix="/facturas", tags=["facturas"])
 
@@ -29,6 +31,7 @@ def leer_factura(conn: Conn, factura_id: int) -> FacturaSalida | None:
     fid, numero, estado, total, cufe, fecha, medio, despacho_id, venta_id, cliente_id, error = fila
     cliente = clientes.obtener(conn, cliente_id)
     assert cliente is not None  # FK
+    e = entrega.obtener(conn, fid)
     return FacturaSalida(
         id=fid, numero=numero, estado=estado, total=total, cufe=cufe, fecha_emision=fecha, medio_pago=medio,
         origen_tipo="despacho" if despacho_id is not None else "venta_manual",
@@ -36,6 +39,11 @@ def leer_factura(conn: Conn, factura_id: int) -> FacturaSalida | None:
         cliente=ClienteFactura(id=cliente.id, tipo_documento=cast(TipoDocumento, cliente.tipo_documento),
                                nombre_mostrar=cliente.nombre_mostrar),
         error=error,
+        entrega=None if e is None else EntregaSalida(
+            estado=e.estado.value,
+            nombre_zip=e.nombre_zip,
+            enviada_en=e.enviada_en,
+        ),
     )  # fmt: skip
 
 
@@ -77,14 +85,6 @@ def consultar(factura_id: int, conn: Conn, _: SesionActual) -> FacturaSalida:
     return factura
 
 
-def texto_validacion(respuesta: dict[str, object] | None) -> str:
-    """Lo que el PDF dice de la validación. Con el proveedor simulado, lo dice claramente; nunca inventa una fecha."""
-    if respuesta and respuesta.get("simulado"):
-        return "SIMULADA (banco de pruebas): no se envió a la DIAN"
-    fecha = (respuesta or {}).get("fecha_validacion")
-    return str(fecha) if fecha else "SIN DATO DE VALIDACIÓN"
-
-
 @router.get(
     "/{factura_id}/pdf",
     response_class=Response,
@@ -120,3 +120,53 @@ def pdf(factura_id: int, conn: Conn, sesion: SesionActual) -> Response:
             "Cache-Control": "no-store",
         },
     )
+
+
+@router.get(
+    "/{factura_id}/zip",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/zip": {}}, "description": "el ZIP entregado (AttachedDocument + PDF)"},
+        404: {"model": Error, "description": "no existe la factura o todavía no tiene entrega"},
+    },
+    summary="Descargar el ZIP que se le entregó al cliente (el mismo archivo del correo)",
+)
+def descargar_zip(factura_id: int, conn: Conn, sesion: SesionActual) -> Response:
+    e = entrega.obtener(conn, factura_id)
+    if e is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "la factura no existe o todavía no tiene entrega")
+    # Lleva datos personales del comprador: queda en la auditoría quién lo descargó (sin esos datos).
+    auditar(conn, "FACTURA_ZIP", "factura", factura_id, usuario_id=sesion.usuario_id)
+    return Response(
+        e.zip,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{e.nombre_zip}"', "Cache-Control": "no-store"},
+    )
+
+
+@router.post(
+    "/{factura_id}/reenviar",
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        404: {"model": Error},
+        409: {"model": Error, "description": "no está FACTURADA o ya hay un envío en curso"},
+    },
+    summary="Volver a enviar al cliente el MISMO ZIP (a su correo actual). Solo administradores",
+)
+def reenviar(factura_id: int, conn: Conn, sesion: SesionAdmin) -> dict[str, str]:
+    exigir_autocommit(conn)
+    with conn.transaction():
+        fila = conn.execute("SELECT estado FROM factura WHERE id = %s FOR UPDATE", (factura_id,)).fetchone()
+        if fila is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "no existe esa factura")
+        if fila[0] != "FACTURADO":
+            raise HTTPException(status.HTTP_409_CONFLICT, f"la factura está {fila[0]}: solo se reenvía una FACTURADA")
+        try:
+            with conn.transaction():  # punto de guardado: el choque con el índice no aborta la transacción
+                encolar(conn, factura_id, TipoTrabajo.ENVIAR_CORREO)
+        except errors.UniqueViolation:  # ux_outbox_un_trabajo_vivo: ya hay un envío pendiente
+            raise HTTPException(status.HTTP_409_CONFLICT, "ya hay un envío de esta factura en curso") from None
+        if entrega.obtener(conn, factura_id) is not None:  # sin entrega (no se pudo armar): el worker la vuelve a armar
+            entrega.marcar(conn, factura_id, EstadoEntrega.PENDIENTE, intento=False)
+        auditar(conn, "FACTURA_REENVIO", "factura", factura_id, usuario_id=sesion.usuario_id)
+    return {"mensaje": "reenvío en cola"}

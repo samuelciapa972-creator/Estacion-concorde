@@ -1,4 +1,4 @@
-# Contexto de construcción de infra/caddy/Dockerfile (la raíz). Solo hace falta web/ e infra/caddy/.
+# Contexto de construcción de infra/caddy/Dockerfile (la raíz). Solo hace falta Frontend/ e infra/caddy/.
 .git/
 **/node_modules/
 **/dist/
@@ -15,3 +15,4 @@ docs/
 *.p12
 *.pfx
 datos/
+*.zip

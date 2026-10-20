@@ -1,4 +1,4 @@
-"""El contrato con el frontend: web/openapi.json debe ser exactamente el esquema actual de la API."""
+"""El contrato con el frontend: Frontend/openapi.json debe ser exactamente el esquema actual de la API."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ from pathlib import Path
 
 from estacion.api.openapi import como_texto, esquema
 
-ARCHIVO_WEB = Path(__file__).resolve().parents[2] / "web" / "openapi.json"
+ARCHIVO_WEB = Path(__file__).resolve().parents[2] / "Frontend" / "openapi.json"
 
 
 def test_openapi_al_dia():
     assert ARCHIVO_WEB.read_text(encoding="utf-8") == como_texto(), (
-        "web/openapi.json está desactualizado: corra `make tipos` y revise el cambio en el frontend"
+        "Frontend/openapi.json está desactualizado: corra `make tipos` y revise el cambio en el frontend"
     )
 
 

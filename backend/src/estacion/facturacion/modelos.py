@@ -23,7 +23,7 @@ class EstadoFactura(StrEnum):
     EN_PROCESO = "EN_PROCESO"  # numerada y en cola de envío
     FACTURADO = "FACTURADO"  # aceptada por el proveedor / la DIAN
     RECHAZADO = "RECHAZADO"  # rechazo definitivo: se sabe que NO quedó emitida
-    INCIERTO = "INCIERTO"  # sin respuesta: puede haber quedado; se concilia por la clave
+    INCIERTO = "INCIERTO"  # sin respuesta: puede haber quedado; se concilia con el proveedor (CUFE)
 
 
 class EstadoOutbox(StrEnum):
@@ -37,7 +37,16 @@ class EstadoOutbox(StrEnum):
 
 class TipoTrabajo(StrEnum):
     ENVIAR_DIAN = "ENVIAR_DIAN"
-    CONSULTAR_DIAN = "CONSULTAR_DIAN"  # conciliar un caso INCIERTO por la clave de emisión
+    CONSULTAR_DIAN = "CONSULTAR_DIAN"  # conciliar un caso INCIERTO o pedir el resultado de un envío asíncrono
+    ENVIAR_CORREO = "ENVIAR_CORREO"  # entregar al cliente el ZIP (AttachedDocument + PDF)
+
+
+class EstadoEntrega(StrEnum):
+    """Estado de la entrega del ZIP al cliente (tabla `entrega`). La factura sigue válida aunque falle."""
+
+    PENDIENTE = "PENDIENTE"
+    ENVIADA = "ENVIADA"
+    FALLIDA = "FALLIDA"  # rechazo del servidor o reintentos agotados: revisión humana y `reenviar`
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,3 +108,13 @@ class ResultadoEmision:
     emitida_en: datetime
     estado: str = "EMITIDA"
     detalle: dict = field(default_factory=dict, compare=False)
+    # La respuesta de validación de la DIAN (ApplicationResponse, XML); va dentro del AttachedDocument.
+    application_response: bytes | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class EnvioPendiente:
+    """El proveedor recibió el documento pero lo valida después (set de pruebas de la DIAN): el resultado se consulta
+    con `track_id` (el ZipKey)."""
+
+    track_id: str

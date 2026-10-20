@@ -16,12 +16,22 @@ from psycopg import errors
 
 from conftest import BaseDePrueba, migrar
 from estacion.facturacion.documentos import TIPOS_DOCUMENTO, calcular_dv
-from estacion.facturacion.modelos import EstadoFactura, EstadoFacturacion, EstadoOutbox, TipoTrabajo
+from estacion.facturacion.modelos import EstadoEntrega, EstadoFactura, EstadoFacturacion, EstadoOutbox, TipoTrabajo
 from estacion.modelos import FormaPago, MarcaSurtidor, PlacaTipo, Rol, Severidad
 
 pytestmark = pytest.mark.bd
 
-TABLAS_NUEVAS = {"estacion", "numeracion", "usuario", "venta_manual", "factura", "outbox", "auditoria"}
+TABLAS_NUEVAS = {
+    "estacion",
+    "numeracion",
+    "usuario",
+    "venta_manual",
+    "factura",
+    "outbox",
+    "auditoria",
+    "entrega",
+    "entrega_consecutivo",
+}
 TABLAS_INICIALES = {
     "surtidor", "producto", "importacion", "turno", "cliente", "vehiculo", "despacho", "anomalia", "fila_rechazada",
 }  # fmt: skip
@@ -36,7 +46,7 @@ def test_upgrade_desde_cero_downgrade_a_base_y_otra_vez_upgrade(esquema_vacio):
     bd = esquema_vacio
     migrar(bd.dsn)
     assert tablas(bd) == TABLAS_INICIALES | TABLAS_NUEVAS | {"alembic_version"}
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0004"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0006"
 
     migrar(bd.dsn, "base", bajar=True)
     assert tablas(bd) == {"alembic_version"}
@@ -47,7 +57,7 @@ def test_upgrade_desde_cero_downgrade_a_base_y_otra_vez_upgrade(esquema_vacio):
     ) == 0  # fmt: skip
 
     migrar(bd.dsn)
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0004"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0006"
 
 
 def test_bajar_la_0004_deja_las_vistas_de_ventas_sin_origen(esquema_vacio):
@@ -95,6 +105,7 @@ def valores_check(bd: BaseDePrueba, tabla: str, columna: str) -> set[str]:
         ("factura", "estado", set(EstadoFactura)),
         ("outbox", "estado", set(EstadoOutbox)),
         ("outbox", "tipo", set(TipoTrabajo)),
+        ("entrega", "estado", set(EstadoEntrega)),
         ("usuario", "rol", set(Rol)),
         ("despacho", "forma_pago", set(FormaPago)),
         ("surtidor", "marca", set(MarcaSurtidor)),
@@ -345,3 +356,47 @@ def test_la_auditoria_solo_admite_agregar(datos):
     with pytest.raises(errors.RaiseException, match="TRUNCATE"):
         datos.conn.execute("TRUNCATE auditoria")
     assert datos.uno("SELECT count(*) FROM auditoria") == 1
+
+
+# ------------------------------------------------------------------------------------------ 0005: entrega
+def test_0005_entrega_restricciones(bd):
+    bd.ejecutar("INSERT INTO entrega_consecutivo (anio, siguiente) VALUES (2026, 1)")
+    with pytest.raises(errors.CheckViolation, match="entrega_consecutivo_anio_check"):
+        bd.ejecutar("INSERT INTO entrega_consecutivo (anio, siguiente) VALUES (1999, 1)")
+    with pytest.raises(errors.ForeignKeyViolation):  # una entrega siempre es de una factura que existe
+        bd.ejecutar(
+            """INSERT INTO entrega (factura_id, anio, consecutivo, nombre_zip, zip)
+               VALUES (999, 2026, 1, 'z0900123456000260000000a.zip', '\\x00')"""
+        )
+    assert bd.valor(
+        "SELECT count(*) FROM information_schema.columns WHERE table_schema = %s AND table_name = 'factura' "
+        "AND column_name = 'application_response'",
+        (bd.esquema,),
+    ) == 1  # fmt: skip
+
+
+def test_bajar_la_0005_quita_la_entrega(esquema_vacio):
+    bd = esquema_vacio
+    migrar(bd.dsn)
+    migrar(bd.dsn, "0004", bajar=True)
+    assert not {"entrega", "entrega_consecutivo"} & tablas(bd)
+    assert valores_check(bd, "outbox", "tipo") == {"ENVIAR_DIAN", "CONSULTAR_DIAN"}
+
+
+# ------------------------------------------------------------------------------------------ 0006: cliente DIAN
+def _columna_track(bd: BaseDePrueba) -> int:
+    return bd.valor(
+        "SELECT count(*) FROM information_schema.columns WHERE table_schema = %s AND table_name = 'factura' "
+        "AND column_name = 'dian_track_id'",
+        (bd.esquema,),
+    )
+
+
+def test_0006_track_id(bd):
+    assert _columna_track(bd) == 1
+
+
+def test_bajar_la_0006_quita_el_track_id(esquema_vacio):
+    migrar(esquema_vacio.dsn)
+    migrar(esquema_vacio.dsn, "0005", bajar=True)
+    assert _columna_track(esquema_vacio) == 0

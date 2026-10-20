@@ -248,7 +248,7 @@ def test_despacho_y_su_venta_manual_en_paralelo_solo_uno_factura(escenario):
 
 
 # ------------------------------------------------------------------------------------------ aceptación
-def test_flujo_completo_desde_el_simulador(escenario, conn):
+def test_flujo_completo_desde_el_simulador(escenario, conn, recursos):
     """Sin ningún surtidor real: el simulador despacha, el bombero ve el pendiente, factura y el worker envía."""
     sim = SimuladorSurtidor(semilla=3, reloj=lambda: AHORA)
     sim.despachar("A", pistola=1, galones=Decimal("3.120"), forma_pago="CONTADO")
@@ -259,20 +259,21 @@ def test_flujo_completo_desde_el_simulador(escenario, conn):
     factura = solicitar(escenario, conn, pendiente.origen)
     assert listar_pendientes(conn) == []
 
-    (hecho,) = procesar_pendientes(conn, ProveedorSimulado())
+    hecho, entregada = procesar_pendientes(conn, ProveedorSimulado(), recursos=recursos)
     assert hecho.estado_factura == EstadoFactura.FACTURADO
+    assert entregada.tipo == "ENVIAR_CORREO"
     assert estado(escenario, pendiente.origen) == "FACTURADO"
     assert escenario.datos.uno("SELECT estado FROM factura WHERE id = %s", (factura.id,)) == "FACTURADO"
 
 
-def test_venta_manual_enlazada_y_rechazada_se_reenvia_con_su_numero(escenario, conn):
+def test_venta_manual_enlazada_y_rechazada_se_reenvia_con_su_numero(escenario, conn, recursos):
     despacho = escenario.datos.despacho()
     venta = venta_igual_al_despacho(escenario, despacho)
     primera = solicitar(escenario, conn, Origen("venta_manual", venta))
     enlazar_venta_manual(conn, venta_id=venta, despacho_id=despacho, usuario_id=escenario.usuario)
     proveedor = ProveedorSimulado()
     proveedor.falla_siguiente = "rechazo"
-    procesar_pendientes(conn, proveedor)
+    procesar_pendientes(conn, proveedor, recursos=recursos)
     assert estado(escenario, Origen("venta_manual", venta)) == "PENDIENTE"
 
     otra = solicitar(escenario, conn, Origen("venta_manual", venta))  # su propia factura rechazada no estorba

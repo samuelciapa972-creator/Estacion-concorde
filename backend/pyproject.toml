@@ -6,10 +6,12 @@ requires-python = ">=3.12"
 dependencies = [
     "psycopg[binary]>=3.2", "psycopg-pool>=3.2", "lxml>=5.0", "openpyxl>=3.1", "sqlalchemy>=2.0", "alembic>=1.13",
     "fastapi>=0.115", "uvicorn>=0.30", "pyjwt>=2.9", "argon2-cffi>=23.1", "reportlab>=5.0",
+    "cryptography>=43",  # firma XAdES del XML (facturacion/firma.py)
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "lxml-stubs", "types-openpyxl", "types-reportlab", "httpx2>=2.13"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "lxml-stubs", "types-openpyxl", "types-reportlab", "httpx2>=2.13",
+       "signxml>=4.0"]  # segunda opinión sobre la firma en tests/test_firma.py
 
 [build-system]
 requires = ["setuptools>=68"]

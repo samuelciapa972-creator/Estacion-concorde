@@ -1,19 +1,24 @@
 # Banco de pruebas de la estación. Requiere: uv (o Python 3.12 + venv), Node 22 y Docker.
-# Estructura: backend/ (Python), web/ (React), infra/ (docker-compose). Todo se maneja desde aquí.
+# Estructura: backend/ (Python), Frontend/ (React), infra/ (docker-compose). Todo se maneja desde aquí.
 #
-#   make install       entornos de backend (backend/.venv) y web (web/node_modules)
+#   make install       entornos de backend (backend/.venv) y web (Frontend/node_modules)
 #   make up            PostgreSQL 16 del compose y migraciones (alembic upgrade head)
 #   make migrate       solo las migraciones
-#   make test          pruebas de backend (incluidas las de integración contra PostgreSQL) y de web
-#   make lint          ruff + mypy (backend) y eslint + tsc (web)
+#   make test          pruebas de backend (incluidas las de integración contra PostgreSQL) y de web (vitest + compilado)
+#   make lint          ruff + mypy (backend) y eslint (web)
 #   make format        aplica el formato de ruff
 #   make db-reset      BORRA la base de desarrollo y la recrea con las migraciones
 #   make simulador     surtidor simulado: un despacho cada 20 s en la base de desarrollo (Ctrl+C para parar)
 #   make api           API en http://127.0.0.1:8000 (documentación en /docs); necesita JWT_SECRETO
 #   make worker        procesa la cola de envíos con el proveedor SIMULADO (no envía nada a la DIAN)
+#   make worker-dian   procesa la cola enviando al ambiente de HABILITACIÓN de la DIAN (certificado real en .env)
+#   make habilitacion-probar   prueba certificado, firma y conexión con la DIAN (no envía documentos)
+#   make mail          buzón de PRUEBA (Mailpit): recibe los correos de las facturas en http://localhost:8025
+#   make correo-prueba DESTINO=x@correo.com   envía un correo de prueba (sin factura) con la configuración del .env
+#   make certificado   genera el certificado de PRUEBA para firmar (datos/certificado-prueba.pfx, fuera de git)
 #   make web           frontend en http://localhost:5173 (usa la API de `make api` bajo /api)
-#   make web-build     compilado de la PWA (web/dist)
-#   make tipos         regenera web/src/api/esquema.ts desde el OpenAPI de la API
+#   make web-build     compilado del frontend (Frontend/dist)
+#   make tipos         regenera Frontend/openapi.json (contrato de la API; lo verifica test_openapi)
 #
 # Todo en contenedores (como quedaría en el servidor de la estación; necesita JWT_SECRETO en .env):
 #   make stack            db + migraciones + api + worker + web (Caddy, HTTPS local) en https://localhost
@@ -23,7 +28,7 @@
 #   make ca               copia el certificado raíz de Caddy a infra/caddy-root.crt (para instalar en la tablet)
 
 BACK    := backend
-WEB     := web
+WEB     := Frontend
 VENV    ?= .venv
 # Rutas relativas a backend/: las recetas de Python corren con `cd backend`.
 PY      := $(VENV)/bin/python
@@ -37,7 +42,7 @@ DATABASE_URL ?= postgresql://estacion:estacion@localhost:5432/estacion
 export DATABASE_URL
 
 .PHONY: install up migrate down db-reset test test-back test-rapido test-web lint lint-back lint-web format \
-        simulador worker api web web-build tipos stack stack-simulador stack-logs stack-down stack-usuario ca
+        simulador worker worker-dian habilitacion-probar mail correo-prueba certificado api web web-build tipos stack stack-simulador stack-logs stack-down stack-usuario ca
 
 install:
 	cd $(BACK) && uv venv --python 3.12 $(VENV) && uv pip install --python $(PY) -e ".[dev]"
@@ -70,7 +75,8 @@ test-rapido:
 	cd $(BACK) && ESTACION_TEST_DSN= $(PY) -m pytest
 
 test-web:
-	cd $(WEB) && npm test
+	# Pruebas de formato y documentos (vitest) y que el frontend compile.
+	cd $(WEB) && npm test && npm run build
 
 lint: lint-back lint-web
 
@@ -92,6 +98,24 @@ simulador:
 worker:
 	cd $(BACK) && $(PY) -m estacion.worker
 
+# Leen DIAN_* y DIAN_CERTIFICADO_* del .env (si existe).
+worker-dian:
+	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.worker --proveedor dian
+
+habilitacion-probar:
+	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.habilitacion probar-conexion
+
+mail:
+	$(COMPOSE) up -d mailpit
+
+# Lee ESTACION_SMTP_* del .env (si existe) y manda un correo sin factura a DESTINO.
+correo-prueba:
+	@test -n "$(DESTINO)" || { echo "uso: make correo-prueba DESTINO=su@correo.com"; exit 2; }
+	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.entrega.probar_correo "$(DESTINO)"
+
+certificado:
+	cd $(BACK) && $(PY) -m estacion.certificado --salida ../datos/certificado-prueba.pfx
+
 api:
 	cd $(BACK) && $(PY) -m estacion.api --recargar
 
@@ -103,7 +127,6 @@ web-build:
 
 tipos:
 	cd $(BACK) && $(PY) -m estacion.api.openapi > ../$(WEB)/openapi.json
-	cd $(WEB) && npm run tipos
 
 stack:
 	$(COMPOSE) up -d --build --wait

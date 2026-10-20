@@ -148,6 +148,19 @@ class TestValores(unittest.TestCase):
         )[0]
         self.assertEqual(tipo, "13")
 
+    def test_el_prefijo_va_siempre_aunque_no_haya_matricula(self):
+        # Rechazo real de la DIAN (FAB10a/FAJ50): sin CorporateRegistrationScheme/ID = prefijo, la DIAN no encuentra
+        # el punto de facturación. La matrícula mercantil (Name) es opcional; el prefijo no.
+        import dataclasses
+
+        sin_matricula = dataclasses.replace(EMISOR, matricula_mercantil=None)
+        f = construir_factura(solicitud(), consecutivo=215802, emisor=sin_matricula, numeracion=NUMERACION,
+                              software=SOFTWARE)  # fmt: skip
+        registro = "//cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cac:CorporateRegistrationScheme"
+        self.assertEqual(texto(f, registro + "/cbc:ID"), "SETP")
+        self.assertEqual(f.arbol.xpath(registro + "/cbc:Name", namespaces=NS), [])
+        self.assertEqual(texto(self.f, registro + "/cbc:Name"), "12345")  # con matrícula, va también
+
     def test_varias_lineas(self):
         f = construir(solicitud([linea(), linea("10.000", "15990", "159900", "18097", "GASOLINA EXTRA")]))
         self.assertEqual(texto(f, "/i:Invoice/cbc:LineCountNumeric"), "2")
@@ -164,7 +177,26 @@ class TestValores(unittest.TestCase):
 
 
 class TestCufe(unittest.TestCase):
-    """Documentan la fórmula ESCRITA; que sea la correcta lo confirma la DIAN en habilitación."""
+    """La fórmula del Anexo Técnico (sección 11.2), anclada al ejemplo publicado por la DIAN."""
+
+    def test_ejemplo_del_anexo_tecnico(self):
+        # Ejemplo del Anexo Técnico de factura electrónica (sección del CUFE): entradas y hash publicados.
+        cufe = calcular_cufe(
+            numero="323200000129",
+            fecha="2019-01-16",
+            hora="10:53:10-05:00",
+            valor_factura=Decimal("1500000.00"),
+            iva=Decimal("285000.00"),
+            valor_total=Decimal("1785000.00"),
+            nit_emisor="700085371",
+            num_doc_adquirente="800199436",
+            clave_tecnica="693ff6f2a553c3646a063436fd4dd9ded0311471",
+            ambiente="1",
+        )
+        self.assertEqual(
+            cufe,
+            "8bb918b19ba22a694f1da11c643b5e9de39adf60311cf179179e9b33381030bcd4c3c3f156c506ed5908f9276f5bd9b4",
+        )
 
     def test_el_cufe_del_xml_es_el_de_la_formula(self):
         f = construir()
@@ -181,7 +213,6 @@ class TestCufe(unittest.TestCase):
             "0.00"
             "29757.00"
             "900123456"
-            "13"
             "1000000001"
             "clave-tecnica-de-prueba"
             "2"
@@ -200,7 +231,6 @@ class TestCufe(unittest.TestCase):
             valor_factura=Decimal("100"),
             valor_total=Decimal("100"),
             nit_emisor="900123456",
-            tipo_doc_adquirente="13",
             num_doc_adquirente="1",
             clave_tecnica="k",
             ambiente="2",

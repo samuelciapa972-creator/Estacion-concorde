@@ -176,6 +176,14 @@ class ClienteFactura(BaseModel):
     nombre_mostrar: str
 
 
+class EntregaSalida(BaseModel):
+    """La entrega del ZIP al cliente (sin el archivo: se descarga en `GET /facturas/{id}/zip`)."""
+
+    estado: Literal["PENDIENTE", "ENVIADA", "FALLIDA"]
+    nombre_zip: str
+    enviada_en: datetime | None
+
+
 class FacturaSalida(BaseModel):
     id: int
     numero: str
@@ -188,6 +196,7 @@ class FacturaSalida(BaseModel):
     origen_id: int
     cliente: ClienteFactura
     error: str | None
+    entrega: EntregaSalida | None = Field(default=None, description="null mientras no se ha armado el ZIP")
     nueva: bool | None = Field(default=None, description="solo al emitir: False si la clave ya tenía factura")
 
 
@@ -290,6 +299,13 @@ class BusquedaVentasSalida(BaseModel):
     filas: list[VentaSalida]
     total: TotalesSalida = Field(description="del filtro completo, no solo de esta página")
     por_manguera: list[TotalMangueraSalida]
+
+
+class UsuarioEntrada(Esquema):
+    usuario: str = Field(min_length=3, max_length=40, description="se guarda en minúsculas", examples=["bombero2"])
+    nombre: str = Field(min_length=1, max_length=200)
+    rol: Rol = "BOMBERO"
+    pin: str = Field(min_length=4, max_length=8, description="4 a 8 dígitos; se guarda solo su hash")
 
 
 class UsuarioListadoSalida(BaseModel):

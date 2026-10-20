@@ -96,6 +96,49 @@ def test_usuarios_sin_hash_del_pin(api):
     assert api.get("/usuarios", como=api.bombero).status_code == 403
 
 
+def test_crear_usuario_y_entrar(api):
+    datos = {"usuario": "Bombero.Nuevo", "nombre": " Bombero Nuevo ", "rol": "BOMBERO", "pin": "2468"}
+    r = api.post("/usuarios", datos, como=api.admin)
+    assert r.status_code == 201, r.text
+    assert r.json() | {"id": 0} == {"id": 0, "usuario": "bombero.nuevo", "nombre": "Bombero Nuevo",
+                                    "rol": "BOMBERO", "activo": True}  # fmt: skip
+    assert "pin" not in r.text and "argon2" not in r.text
+    assert api.cliente.post("/auth/login", json={"usuario": "bombero.nuevo", "pin": "2468"}).status_code == 200
+
+
+def test_crear_usuario_errores(api):
+    base = {"usuario": "cajero1", "nombre": "Cajero Uno", "rol": "BOMBERO", "pin": "1357"}
+    assert api.post("/usuarios", base, como=api.admin).status_code == 201
+    repetido = api.post("/usuarios", base, como=api.admin)
+    assert repetido.status_code == 409 and "ya existe" in repetido.json()["detail"]
+    assert api.post("/usuarios", {**base, "usuario": "con espacio"}, como=api.admin).status_code == 422
+    pin_malo = api.post("/usuarios", {**base, "usuario": "cajero2", "pin": "12ab"}, como=api.admin)
+    assert pin_malo.status_code == 422 and "1357" not in pin_malo.text
+    assert api.post("/usuarios", {**base, "usuario": "cajero3", "rol": "SUPER"}, como=api.admin).status_code == 422
+    assert api.post("/usuarios", {**base, "usuario": "cajero4"}, como=api.bombero).status_code == 403
+
+
+def test_desactivar_usuario_corta_su_sesion(api):
+    uid = api.e.datos.uno("SELECT id FROM usuario WHERE usuario = %s", (api.bombero,))
+    token = api.entrar(api.bombero)  # sesión abierta ANTES de la baja
+    assert api.cliente.get("/despachos/pendientes", headers=token).status_code == 200
+    baja = api.post(f"/usuarios/{uid}/desactivar", {}, como=api.admin)
+    assert baja.status_code == 200 and baja.json()["activo"] is False
+    assert api.cliente.get("/despachos/pendientes", headers=token).status_code == 401  # su token ya no sirve
+    assert api.cliente.post("/auth/login", json={"usuario": api.bombero, "pin": "4321"}).status_code == 401
+    alta = api.post(f"/usuarios/{uid}/activar", {}, como=api.admin)
+    assert alta.status_code == 200 and alta.json()["activo"] is True
+    assert api.post("/usuarios/9999/desactivar", {}, como=api.admin).status_code == 404
+    assert api.post(f"/usuarios/{uid}/desactivar", {}, como=api.bombero).status_code == 403  # ya reactivado
+
+
+def test_admin_no_puede_desactivarse_a_si_mismo(api):
+    yo = api.e.datos.uno("SELECT id FROM usuario WHERE usuario = %s", (api.admin,))
+    r = api.post(f"/usuarios/{yo}/desactivar", {}, como=api.admin)
+    assert r.status_code == 409 and "propio" in r.json()["detail"]
+    assert api.get("/usuarios", como=api.admin).status_code == 200
+
+
 # ------------------------------------------------------------------------------------------ clientes
 def test_listar_y_buscar_clientes(api):
     api.post("/clientes", persona(), como=api.bombero)

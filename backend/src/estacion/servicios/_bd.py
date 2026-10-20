@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -38,4 +38,13 @@ def auditar(
     conn.execute(
         "INSERT INTO auditoria (usuario_id, accion, entidad, entidad_id, detalle) VALUES (%s, %s, %s, %s, %s)",
         (usuario_id, accion, entidad, str(entidad_id), Jsonb(detalle or {})),
+    )
+
+
+def encolar(conn: Conexion, factura_id: int, tipo: str, *, espera: timedelta | None = None) -> None:
+    """Agrega un trabajo a la cola de envíos (`outbox`); el worker lo toma (tras `espera`, si se da). Va en la
+    transacción del llamador."""
+    conn.execute(
+        "INSERT INTO outbox (factura_id, tipo, proximo_intento) VALUES (%s, %s, now() + %s)",
+        (factura_id, tipo, espera or timedelta(0)),
     )

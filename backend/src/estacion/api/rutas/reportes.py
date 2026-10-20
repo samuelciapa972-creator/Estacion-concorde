@@ -12,27 +12,19 @@ from fastapi.responses import Response
 
 from ...servicios import exportacion_contador, reportes_bd, reportes_pdf
 from ...servicios._bd import auditar
-from ..dependencias import Conn, SesionAdmin
+from ..dependencias import Conn, SesionAdmin, exigir_rango
 from ..esquemas import AnomaliaSalida, Error, FilaTurnoSalida, FilaVentasSalida, PosibleDuplicadoSalida, Severidad
 
 router = APIRouter(tags=["reportes"])
-MAX_DIAS = 400
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 PDF = "application/pdf"
-
-
-def _rango(desde: date, hasta: date) -> None:
-    if hasta < desde:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "`hasta` es anterior a `desde`")
-    if (hasta - desde).days > MAX_DIAS:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"el rango máximo es de {MAX_DIAS} días")
 
 
 @router.get(
     "/reportes/diario", response_model=list[FilaVentasSalida], summary="Ventas por día, producto y forma de pago"
 )
 def diario(conn: Conn, _: SesionAdmin, desde: date, hasta: date, surtidor_id: int | None = None):
-    _rango(desde, hasta)
+    exigir_rango(desde, hasta, hasta_incluido=True)
     return [asdict(f) for f in reportes_bd.ventas_diarias(conn, desde, hasta, surtidor_id)]
 
 
@@ -40,7 +32,7 @@ def diario(conn: Conn, _: SesionAdmin, desde: date, hasta: date, surtidor_id: in
     "/reportes/mensual", response_model=list[FilaVentasSalida], summary="Ventas por mes, producto y forma de pago"
 )
 def mensual(conn: Conn, _: SesionAdmin, desde: date, hasta: date, surtidor_id: int | None = None):
-    _rango(desde, hasta)
+    exigir_rango(desde, hasta, hasta_incluido=True)
     return [asdict(f) for f in reportes_bd.ventas_mensuales(conn, desde, hasta, surtidor_id)]
 
 
@@ -53,7 +45,7 @@ def turno(
     surtidor_id: int | None = None,
     turno_id: int | None = None,
 ):
-    _rango(desde, hasta)
+    exigir_rango(desde, hasta, hasta_incluido=True)
     return [asdict(f) for f in reportes_bd.resumen_turnos(conn, desde, hasta, surtidor_id, turno_id)]
 
 
@@ -63,7 +55,7 @@ def turno(
     summary="Ventas manuales sin enlace que parecen ser un despacho ya contado (posible doble conteo)",
 )
 def posibles_duplicados(conn: Conn, _: SesionAdmin, desde: date, hasta: date):
-    _rango(desde, hasta)
+    exigir_rango(desde, hasta, hasta_incluido=True)
     return [asdict(x) for x in reportes_bd.posibles_duplicados(conn, desde, hasta)]
 
 
@@ -74,7 +66,7 @@ def posibles_duplicados(conn: Conn, _: SesionAdmin, desde: date, hasta: date):
     summary="Excel de ventas de un surtidor (Diario, Mensual, Turnos, Datos, Alertas, Notas)",
 )
 def exportar(conn: Conn, _: SesionAdmin, surtidor_id: int, desde: date, hasta: date) -> Response:
-    _rango(desde, hasta)
+    exigir_rango(desde, hasta, hasta_incluido=True)
     try:
         contenido = reportes_bd.excel_ventas(conn, surtidor_id, desde, hasta)
     except reportes_bd.SurtidorDesconocido as e:
@@ -92,7 +84,7 @@ def exportar(conn: Conn, _: SesionAdmin, surtidor_id: int, desde: date, hasta: d
 def contador(
     conn: Conn, sesion: SesionAdmin, desde: date, hasta: date, formato: Literal["xlsx", "csv", "pdf"] = "xlsx"
 ) -> Response:
-    _rango(desde, hasta)
+    exigir_rango(desde, hasta, hasta_incluido=True)
     if formato == "csv":
         contenido, tipo = exportacion_contador.csv_facturas(conn, desde, hasta), "text/csv; charset=utf-8"
     elif formato == "pdf":
@@ -124,7 +116,7 @@ def reporte_pdf(
     hasta: date,
     surtidor_id: int | None = None,
 ) -> Response:
-    _rango(desde, hasta)
+    exigir_rango(desde, hasta, hasta_incluido=True)
     contenido = reportes_pdf.reporte(conn, tipo, desde, hasta, surtidor_id)
     nombre = f"ventas_{tipo}_{desde:%Y%m%d}_{hasta:%Y%m%d}.pdf"
     return Response(contenido, media_type=PDF, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})

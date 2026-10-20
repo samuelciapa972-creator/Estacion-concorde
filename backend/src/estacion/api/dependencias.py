@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import date
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
@@ -65,3 +66,16 @@ SesionAdmin = Annotated[Sesion, Depends(requiere_admin)]
 def ip_cliente(request: Request) -> str:
     # Sin proxy delante (banco de pruebas). Detrás de uno, usar la cabecera que ese proxy garantice.
     return request.client.host if request.client else "desconocida"
+
+
+MAX_DIAS = 400  # rango máximo de una consulta o reporte
+
+
+def exigir_rango(desde: date, hasta: date, *, hasta_incluido: bool) -> None:
+    """422 si el rango está al revés o pasa de MAX_DIAS. `hasta_incluido`: fechas de reporte (desde == hasta
+    es un día); con horas, `hasta` es excluida y debe ser posterior a `desde`."""
+    if hasta < desde if hasta_incluido else hasta <= desde:
+        detalle = "`hasta` es anterior a `desde`" if hasta_incluido else "`hasta` debe ser posterior a `desde`"
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detalle)
+    if (hasta - desde).days > MAX_DIAS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"el rango máximo es de {MAX_DIAS} días")

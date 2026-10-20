@@ -195,6 +195,14 @@ def leer_xml(xml: bytes) -> DatosRepresentacion:
     )
 
 
+def texto_validacion(respuesta: dict[str, object] | None) -> str:
+    """Lo que el PDF dice de la validación. Con el proveedor simulado, lo dice claramente; nunca inventa una fecha."""
+    if respuesta and respuesta.get("simulado"):
+        return "SIMULADA (banco de pruebas): no se envió a la DIAN"
+    fecha = (respuesta or {}).get("fecha_validacion")
+    return str(fecha) if fecha else "SIN DATO DE VALIDACIÓN"
+
+
 def contenido_qr(d: DatosRepresentacion) -> str:
     """Texto del QR impreso, con el formato del QR de la factura de referencia (SIN VERIFICAR contra el anexo).
 

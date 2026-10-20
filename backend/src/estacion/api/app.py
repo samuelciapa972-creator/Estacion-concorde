@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 
 import psycopg
 from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from psycopg_pool import ConnectionPool, PoolTimeout
 
@@ -23,12 +24,14 @@ from ..servicios.configuracion import ConfiguracionIncompleta
 from ..servicios.emision import ClaveReutilizada, ClienteNoDisponible, OrigenNoDisponible, ServicioEmision
 from ..servicios.importacion_csv import ArchivoInvalido
 from ..servicios.numeracion import NumeracionNoDisponible
+from ..servicios.personal import DesactivarseASiMismo, UsuarioInvalido, UsuarioYaExiste
 from ..servicios.vehiculos import VehiculoInvalido, VehiculoYaExiste
 from ..servicios.ventas import VentaInvalida
 from .ajustes import Ajustes
 from .esquemas import Error, SaludSalida
 from .limites import LimitadorTasa
 from .rutas import admin, clientes, facturas, pista, reportes, sesion
+from .seguridad import PinInvalido
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +50,10 @@ ERRORES: dict[type[Exception], tuple[int, str]] = {
     NumeracionInvalida: (status.HTTP_422_UNPROCESSABLE_CONTENT, ""),
     ConfiguracionIncompleta: (status.HTTP_503_SERVICE_UNAVAILABLE, "no se puede facturar: "),
     NumeracionNoDisponible: (status.HTTP_503_SERVICE_UNAVAILABLE, "no se puede facturar: "),
+    UsuarioYaExiste: (status.HTTP_409_CONFLICT, ""),
+    UsuarioInvalido: (status.HTTP_422_UNPROCESSABLE_CONTENT, ""),
+    PinInvalido: (status.HTTP_422_UNPROCESSABLE_CONTENT, ""),
+    DesactivarseASiMismo: (status.HTTP_409_CONFLICT, ""),
 }
 
 
@@ -73,6 +80,15 @@ def crear_app(
         description="API del sistema que reemplaza a Nexus. **Banco de pruebas: no envía nada a la DIAN.** "
         "Dinero y galones viajan como texto decimal.",
         lifespan=ciclo,
+    )
+    # Solo para abrir el frontend de Vite (puerto 5173) llamando a la API directamente. Con el proxy de Vite o
+    # detrás de Caddy todo va por /api en el mismo origen y esto no se usa.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     app.state.ajustes = aj
     if aj.captcha is None:

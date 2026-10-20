@@ -8,6 +8,8 @@
 datos/
 *.xls
 *.xlsx
+# Copias empaquetadas del proyecto (pueden traer .env y certificados)
+*.zip
 
 # Certificado raíz de la CA local de Caddy (se exporta con `make ca`; cambia por instalación)
 infra/caddy-root.crt

@@ -38,7 +38,7 @@ from ..facturacion.modelos import (
     TipoTrabajo,
 )
 from ..facturacion.xml_factura import construir_factura
-from ._bd import Conexion, ahora_local, auditar, exigir_autocommit
+from ._bd import Conexion, ahora_local, auditar, encolar, exigir_autocommit
 from .configuracion import ConfiguracionIncompleta, cargar_configuracion
 from .numeracion import ConsecutivoAsignado, asignar_consecutivo
 
@@ -120,12 +120,14 @@ def leer_origen(conn: Conexion, origen: Origen, *, bloquear: bool) -> _DatosOrig
     return _DatosOrigen(estado=estado, forma_pago=forma_pago, linea=linea)
 
 
-def leer_cliente(conn: Conexion, cliente_id: int) -> Cliente:
+def leer_cliente(conn: Conexion, cliente_id: int, *, solo_activos: bool = True) -> Cliente:
+    """`solo_activos=False` para una factura YA numerada (la cola de envíos): la baja lógica del cliente impide
+    facturas nuevas, pero no puede dejar sin enviar una que ya gastó su consecutivo."""
     fila = conn.execute(
         """SELECT tipo_documento, numero_documento, nombres, apellidos, coalesce(email, ''),
                   digito_verificacion, autoriza_tratamiento
-           FROM cliente WHERE id = %s AND activo""",
-        (cliente_id,),
+           FROM cliente WHERE id = %s AND (activo OR NOT %s)""",
+        (cliente_id, solo_activos),
     ).fetchone()
     if fila is None:
         raise ClienteNoDisponible(f"el cliente {cliente_id} no existe o está inactivo")
@@ -271,6 +273,7 @@ class ServicioEmision:
                     """UPDATE factura SET clave_emision = %s, estado = 'EN_PROCESO', cliente_id = %s,
                               usuario_id = %s, forma_pago = %s, medio_pago = %s, total = %s, fecha_emision = %s,
                               cufe = %s, xml_sin_firmar = %s, xml_firmado = NULL, respuesta_dian = NULL,
+                              application_response = NULL, dian_track_id = NULL,
                               error = NULL, actualizada_en = now()
                        WHERE id = %s""",
                     (clave, cliente_id, usuario_id, datos.forma_pago, medio_pago, solicitud.total, fecha, xml.cufe,
@@ -281,7 +284,7 @@ class ServicioEmision:
                 f"UPDATE {origen.tipo} SET estado_facturacion = 'EN_PROCESO' WHERE id = %s",
                 (origen.id,),
             )
-            conn.execute("INSERT INTO outbox (factura_id, tipo) VALUES (%s, %s)", (factura_id, TipoTrabajo.ENVIAR_DIAN))
+            encolar(conn, factura_id, TipoTrabajo.ENVIAR_DIAN)
             auditar(
                 conn,
                 accion,
