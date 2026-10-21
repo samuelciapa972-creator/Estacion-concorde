@@ -1,6 +1,6 @@
 """Habilitación ante la DIAN (software propio): `python -m estacion.habilitacion <acción>`.
 
-Orden recomendado (todo contra el ambiente de HABILITACIÓN; producción está bloqueada):
+Orden recomendado (todo contra el ambiente de HABILITACIÓN):
     probar-conexion         GetNumberingRange: certificado, firma del mensaje y red. No escribe nada.
     configurar-numeracion   carga la numeración del set (SETP 990000000-995000000) como la activa.
     enviar --usuario admin  crea N ventas de prueba y sus facturas; el ENVÍO lo hace el worker:
@@ -29,7 +29,6 @@ from .facturacion.firma import FirmaError, certificado_desde_entorno
 from .facturacion.modelos import Cliente
 from .servicios import clientes
 from .servicios._bd import auditar
-from .servicios.configuracion import AMBIENTES_PERMITIDOS
 from .servicios.emision import Origen, ServicioEmision
 from .servicios.ventas import registrar_venta_manual
 
@@ -70,8 +69,8 @@ def main(
     args = ap.parse_args(argv)
 
     entorno = os.environ if entorno is None else entorno
-    if entorno.get("DIAN_AMBIENTE", "").strip() not in AMBIENTES_PERMITIDOS:
-        _err('DIAN_AMBIENTE debe ser "2" (habilitación); producción está bloqueada')
+    if entorno.get("DIAN_AMBIENTE", "").strip() != "2":  # esta herramienta es solo del set de pruebas
+        _err('DIAN_AMBIENTE debe ser "2" (habilitación)')
         return 2
     dsn = entorno.get("DATABASE_URL", "").strip()
     if not dsn:

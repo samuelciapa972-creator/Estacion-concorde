@@ -334,10 +334,66 @@ def test_construir_proveedor_dian(escenario, conn, certificado):
     sin_set = worker.construir_proveedor("dian", conn, ENTORNO_DIAN, certificado)
     assert isinstance(sin_set, ProveedorDian) and sin_set.modo == "normal"
     with pytest.raises(ConfiguracionIncompleta, match="DIAN_AMBIENTE"):
-        worker.construir_proveedor("dian", conn, {**entorno, "DIAN_AMBIENTE": "1"}, certificado)
+        worker.construir_proveedor("dian", conn, {**entorno, "DIAN_AMBIENTE": "3"}, certificado)
     with pytest.raises(ConfiguracionIncompleta, match="certificado"):
         worker.construir_proveedor("dian", conn, entorno, None)
     assert isinstance(worker.construir_proveedor("simulado", conn, entorno, None), ProveedorSimulado)
+
+
+ENTORNO_PRODUCCION = {**ENTORNO_DIAN, "DIAN_AMBIENTE": "1"}
+
+
+def test_produccion_rechaza_simulado(escenario, conn):
+    from estacion.servicios.configuracion import ConfiguracionIncompleta
+
+    with pytest.raises(ConfiguracionIncompleta, match="simulado"):
+        worker.construir_proveedor("simulado", conn, ENTORNO_PRODUCCION, None)
+
+
+def test_produccion_rechaza_test_set_id(escenario, conn, certificado_real):
+    from estacion.servicios.configuracion import ConfiguracionIncompleta
+
+    with pytest.raises(ConfiguracionIncompleta, match="DIAN_TEST_SET_ID"):
+        worker.construir_proveedor("dian", conn, {**ENTORNO_PRODUCCION, "DIAN_TEST_SET_ID": "set-1"}, certificado_real)
+
+
+def test_produccion_rechaza_certificado_de_prueba(escenario, conn, certificado):
+    from estacion.servicios.configuracion import ConfiguracionIncompleta
+
+    with pytest.raises(ConfiguracionIncompleta, match="certificado de prueba"):
+        worker.construir_proveedor("dian", conn, ENTORNO_PRODUCCION, certificado)
+
+
+def test_produccion_usa_url_de_produccion(escenario, conn, certificado_real):
+    from estacion.facturacion.dian.proveedor import ProveedorDian
+    from estacion.facturacion.dian.sobre import URL_PRODUCCION
+
+    p = worker.construir_proveedor("dian", conn, ENTORNO_PRODUCCION, certificado_real)
+    assert isinstance(p, ProveedorDian) and p.modo == "normal"
+    assert p._cliente._url == URL_PRODUCCION
+
+
+@pytest.fixture
+def certificado_real():
+    """Certificado autofirmado cuyo CN NO lleva la marca de prueba (hace de certificado de la empresa)."""
+    from datetime import UTC, datetime, timedelta
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    from estacion.facturacion.firma import Certificado
+
+    llave = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    nombre = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "EMPRESA REAL SAS")])
+    ahora = datetime.now(UTC)
+    cert = (
+        x509.CertificateBuilder().subject_name(nombre).issuer_name(nombre).public_key(llave.public_key())
+        .serial_number(x509.random_serial_number()).not_valid_before(ahora - timedelta(days=1))
+        .not_valid_after(ahora + timedelta(days=30)).sign(llave, hashes.SHA256())
+    )  # fmt: skip
+    return Certificado(llave, cert)
 
 
 # ------------------------------------------------------------------------------------------ revisión final

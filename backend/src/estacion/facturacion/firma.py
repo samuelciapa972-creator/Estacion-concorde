@@ -61,6 +61,13 @@ class Certificado:
 
 
 # ------------------------------------------------------------------------------------------ certificado
+def es_certificado_de_prueba(cert: Certificado) -> bool:
+    """True si es el autofirmado del banco de pruebas (su CN lleva `certificado_prueba.MARCA`)."""
+    from .certificado_prueba import MARCA  # import tardío: certificado_prueba importa este módulo
+
+    return any(MARCA in str(a.value) for a in cert.cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME))
+
+
 def cargar_certificado(ruta: str, clave: str) -> Certificado:
     try:
         datos = Path(ruta).read_bytes()

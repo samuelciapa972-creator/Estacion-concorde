@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from ..facturacion.configuracion import Emisor, Numeracion, SoftwareDian
 from ._bd import Conexion
 
-# Banco de pruebas: solo el ambiente de habilitación de la DIAN. Producción ("1") queda bloqueada en el código.
-AMBIENTES_PERMITIDOS = {"2"}
+# Ambientes de la DIAN: "1" producción, "2" habilitación. La numeración activa debe ser del mismo ambiente.
+AMBIENTES_PERMITIDOS = {"1", "2"}
 
 
 class ConfiguracionIncompleta(Exception):
@@ -46,7 +46,7 @@ def software_desde_entorno(entorno: Mapping[str, str], nit_emisor: str) -> Softw
         raise ConfiguracionIncompleta(f"faltan variables de entorno de la DIAN: {', '.join(faltan)}")
     if ambiente not in AMBIENTES_PERMITIDOS:
         raise ConfiguracionIncompleta(
-            f'DIAN_AMBIENTE={ambiente!r} no permitido: este banco de pruebas solo usa habilitación ("2")'
+            f'DIAN_AMBIENTE={ambiente!r} no permitido: use producción ("1") o habilitación ("2")'
         )
     # Software propio: el proveedor tecnológico es la propia empresa (SIN VERIFICAR contra el anexo).
     return SoftwareDian(software_id=software_id, pin=pin, nit_proveedor=nit_emisor, ambiente=ambiente)
@@ -62,7 +62,8 @@ def cargar_configuracion(
                   e.actividades_ciiu, e.responsabilidades, e.responsable_iva, e.codigo_municipio_dane,
                   e.municipio, e.codigo_departamento, e.departamento, e.nombre_comercial, e.codigo_postal,
                   e.matricula_mercantil,
-                  n.prefijo, n.desde, n.hasta, n.numero_resolucion, n.vigente_desde, n.vigente_hasta
+                  n.prefijo, n.desde, n.hasta, n.numero_resolucion, n.vigente_desde, n.vigente_hasta,
+                  n.ambiente
            FROM numeracion n JOIN estacion e ON e.id = n.estacion_id
            WHERE n.id = %s AND e.activa""",
         (numeracion_id,),
@@ -71,7 +72,7 @@ def cargar_configuracion(
         raise ConfiguracionIncompleta("no hay una estación activa con esa numeración")
     (estacion_id, nit, razon_social, direccion, telefono, email, actividades, responsabilidades, responsable_iva,
      cod_municipio, municipio, cod_depto, depto, nombre_comercial, cod_postal, matricula,
-     prefijo, desde, hasta, resolucion, vigente_desde, vigente_hasta) = fila  # fmt: skip
+     prefijo, desde, hasta, resolucion, vigente_desde, vigente_hasta, ambiente_numeracion) = fila  # fmt: skip
 
     faltan: list[str] = []
     clave_tecnica = _requerida(entorno, "DIAN_CLAVE_TECNICA", faltan)
@@ -79,6 +80,12 @@ def cargar_configuracion(
         _requerida(entorno, nombre, faltan)
     if faltan:
         raise ConfiguracionIncompleta(f"faltan variables de entorno de la DIAN: {', '.join(faltan)}")
+
+    software = software_desde_entorno(entorno, nit)
+    if ambiente_numeracion != software.ambiente:  # evita emitir en un ambiente con la resolución del otro
+        raise ConfiguracionIncompleta(
+            f"la numeración activa es del ambiente {ambiente_numeracion} y DIAN_AMBIENTE es {software.ambiente}"
+        )
 
     emisor = Emisor(
         nit=nit,
@@ -106,4 +113,4 @@ def cargar_configuracion(
         vigente_hasta=vigente_hasta,
         clave_tecnica=clave_tecnica,
     )
-    return ConfiguracionFiscal(estacion_id, emisor, numeracion, software_desde_entorno(entorno, nit))
+    return ConfiguracionFiscal(estacion_id, emisor, numeracion, software)

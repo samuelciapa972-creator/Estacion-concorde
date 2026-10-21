@@ -207,12 +207,31 @@ def _sin(variable: str) -> dict[str, str]:
     return {k: v for k, v in ENTORNO_DIAN.items() if k != variable}
 
 
+def test_produccion_con_numeracion_de_habilitacion_no_emite(escenario, conn):
+    origen = Origen("despacho", escenario.datos.despacho())
+    with pytest.raises(ConfiguracionIncompleta, match="ambiente 2 y DIAN_AMBIENTE es 1"):
+        solicitar(escenario, conn, origen, entorno={**ENTORNO_DIAN, "DIAN_AMBIENTE": "1"})
+    assert escenario.siguiente() == 1
+    assert contar(escenario, "factura") == 0 and contar(escenario, "outbox") == 0
+
+
+def test_produccion_con_numeracion_de_produccion_emite(escenario, conn):
+    datos = escenario.datos
+    datos.conn.execute("UPDATE numeracion SET prefijo = 'EDSC', ambiente = '1' WHERE id = %s", (escenario.numeracion,))
+    origen = Origen("despacho", datos.despacho())
+    f = solicitar(escenario, conn, origen, entorno={**ENTORNO_DIAN, "DIAN_AMBIENTE": "1"})
+    ambiente, xml = datos.conn.execute("SELECT ambiente, xml_sin_firmar FROM factura WHERE id = %s", (f.id,)).fetchone()
+    assert ambiente == "1"
+    assert "<cbc:ProfileExecutionID>1</cbc:ProfileExecutionID>" in xml
+    assert "https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=" in xml
+
+
 @pytest.mark.parametrize(
     ("medio", "entorno", "error", "mensaje"),
     [
         ("EFECTIVO", _sin("DIAN_CLAVE_TECNICA"), ConfiguracionIncompleta, "DIAN_CLAVE_TECNICA"),
         ("EFECTIVO", _sin("DIAN_SOFTWARE_PIN"), ConfiguracionIncompleta, "DIAN_SOFTWARE_PIN"),
-        ("EFECTIVO", {**ENTORNO_DIAN, "DIAN_AMBIENTE": "1"}, ConfiguracionIncompleta, "habilitación"),
+        ("EFECTIVO", {**ENTORNO_DIAN, "DIAN_AMBIENTE": "3"}, ConfiguracionIncompleta, "DIAN_AMBIENTE"),
         ("EFECTIVO", {}, ConfiguracionIncompleta, "DIAN_CLAVE_TECNICA, DIAN_AMBIENTE, DIAN_SOFTWARE_ID"),
         # Código DIAN de tarjeta SIN VERIFICAR: el generador la rechaza a propósito.
         ("TARJETA", ENTORNO_DIAN, FacturaNoSoportada, "medio de pago"),

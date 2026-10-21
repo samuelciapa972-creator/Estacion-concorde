@@ -14,9 +14,11 @@ from estacion.facturacion.dian.sobre import (
     NS_WSSE,
     NS_WSU,
     URL_HABILITACION,
+    URL_PRODUCCION,
     SobreInvalido,
     accion,
     sobre,
+    url_servicio,
     verificar_sobre,
 )
 
@@ -115,3 +117,10 @@ def test_el_primer_sobre_de_un_proceso_nuevo_verifica(tmp_path, certificado):
     )
     r = subprocess.run([sys.executable, "-c", codigo], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr[-500:]
+
+
+def test_url_servicio():
+    assert url_servicio("1") == URL_PRODUCCION == "https://vpfe.dian.gov.co/WcfDianCustomerServices.svc"
+    assert url_servicio("2") == URL_HABILITACION
+    with pytest.raises(ValueError):
+        url_servicio("3")

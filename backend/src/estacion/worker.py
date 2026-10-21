@@ -1,10 +1,11 @@
 """Worker de la cola de envíos a la DIAN: `python -m estacion.worker [--una-vez] [--espera 2]`.
 
 Lee DATABASE_URL del entorno. `--proveedor simulado` (por defecto) no envía nada a la DIAN; `--proveedor dian` envía
-al ambiente de HABILITACIÓN (el único permitido) y, con DIAN_TEST_SET_ID, usa el set de pruebas (envío asíncrono).
+al ambiente que diga DIAN_AMBIENTE ("2" habilitación, "1" producción) y, en habilitación con DIAN_TEST_SET_ID,
+usa el set de pruebas (envío asíncrono). En producción se rechaza el proveedor simulado, DIAN_TEST_SET_ID y el
+certificado de prueba.
 Firma con DIAN_CERTIFICADO_RUTA / DIAN_CERTIFICADO_CLAVE (sin ellos no envía nada; las facturas esperan en la cola) y
 entrega el ZIP por SMTP según ESTACION_SMTP_* (por defecto Mailpit en localhost:1025; ver .env.example).
-Producción queda bloqueada en el código (`servicios/configuracion.AMBIENTES_PERMITIDOS`).
 Varios workers pueden correr a la vez: `FOR UPDATE SKIP LOCKED` evita que dos tomen el mismo trabajo.
 """
 
@@ -23,8 +24,8 @@ import psycopg
 from .entrega.correo import ConListaBlanca, EnviadorSmtp, enviador_desde_entorno
 from .facturacion.dian.cliente import ClienteDian
 from .facturacion.dian.proveedor import ProveedorDian
-from .facturacion.dian.sobre import URL_HABILITACION
-from .facturacion.firma import Certificado, FirmaError, certificado_desde_entorno
+from .facturacion.dian.sobre import url_servicio
+from .facturacion.firma import Certificado, FirmaError, certificado_desde_entorno, es_certificado_de_prueba
 from .facturacion.proveedor import ProveedorFacturacion, ProveedorSimulado
 from .servicios.configuracion import AMBIENTES_PERMITIDOS, ConfiguracionIncompleta
 from .servicios.outbox import Recursos, procesar_pendientes
@@ -36,20 +37,28 @@ def construir_proveedor(
     nombre: str, conn: psycopg.Connection[Any], entorno: Mapping[str, str], certificado: Certificado | None
 ) -> ProveedorFacturacion:
     """El proveedor que usa la cola. Con `dian`, falla cerrado si falta algo (mensajes sin secretos)."""
-    if nombre == "simulado":
-        return ProveedorSimulado()
     ambiente = entorno.get("DIAN_AMBIENTE", "").strip()
+    if nombre == "simulado":
+        if ambiente == "1":
+            raise ConfiguracionIncompleta("en producción no se puede usar el proveedor simulado")
+        return ProveedorSimulado()
     if ambiente not in AMBIENTES_PERMITIDOS:
-        raise ConfiguracionIncompleta(f'DIAN_AMBIENTE={ambiente!r} no permitido: solo habilitación ("2")')
+        raise ConfiguracionIncompleta(f'DIAN_AMBIENTE={ambiente!r} no permitido: use "1" o "2"')
     if certificado is None:
         raise ConfiguracionIncompleta("sin certificado de firma no se puede hablar con la DIAN")
+    test_set_id = entorno.get("DIAN_TEST_SET_ID", "").strip() or None
+    if ambiente == "1":
+        if test_set_id:
+            raise ConfiguracionIncompleta("en producción no se usa DIAN_TEST_SET_ID (es del set de pruebas)")
+        if es_certificado_de_prueba(certificado):
+            raise ConfiguracionIncompleta("en producción no se puede firmar con un certificado de prueba")
     fila = conn.execute("SELECT nit FROM estacion WHERE activa").fetchone()
     if fila is None:
         raise ConfiguracionIncompleta("no hay una estación (emisor) activa configurada")
     return ProveedorDian(
-        ClienteDian(URL_HABILITACION, certificado),
+        ClienteDian(url_servicio(ambiente), certificado),
         nit_emisor=fila[0],
-        test_set_id=entorno.get("DIAN_TEST_SET_ID", "").strip() or None,
+        test_set_id=test_set_id,
     )
 
 
@@ -91,7 +100,8 @@ def main(argv: list[str] | None = None) -> int:
             log.error("%s", e)
             return 2
         if isinstance(proveedor, ProveedorDian):
-            log.warning("proveedor DIAN, ambiente de HABILITACIÓN, modo %s", proveedor.modo)
+            nombre_ambiente = "PRODUCCIÓN" if os.environ.get("DIAN_AMBIENTE", "").strip() == "1" else "HABILITACIÓN"
+            log.warning("proveedor DIAN, ambiente de %s, modo %s", nombre_ambiente, proveedor.modo)
         else:
             log.warning("proveedor SIMULADO: las facturas NO se envían a la DIAN")
         while True:

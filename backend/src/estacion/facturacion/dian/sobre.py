@@ -28,6 +28,17 @@ from ..firma import Certificado
 from ..xmldsig import NS_DS, RSA_SHA256, SHA256, b64, firmar_rsa_sha256, sha256_b64, sub, verificar_rsa_sha256
 
 URL_HABILITACION = "https://vpfe-hab.dian.gov.co/WcfDianCustomerServices.svc"
+URL_PRODUCCION = "https://vpfe.dian.gov.co/WcfDianCustomerServices.svc"
+
+
+def url_servicio(ambiente: str) -> str:
+    """URL del web service según el ambiente DIAN: "1" producción, "2" habilitación."""
+    if ambiente == "1":
+        return URL_PRODUCCION
+    if ambiente == "2":
+        return URL_HABILITACION
+    raise ValueError(f"ambiente DIAN desconocido: {ambiente!r}")
+
 
 NS_SOAP = "http://www.w3.org/2003/05/soap-envelope"
 NS_WSA = "http://www.w3.org/2005/08/addressing"
