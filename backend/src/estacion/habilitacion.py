@@ -6,29 +6,36 @@ Orden recomendado (todo contra el ambiente de HABILITACIÓN):
     enviar --usuario admin  crea N ventas de prueba y sus facturas; el ENVÍO lo hace el worker:
                             `python -m estacion.worker --proveedor dian`
     estado                  facturas del set con su estado y lo que respondió la DIAN.
+
+Salida a producción (con DIAN_AMBIENTE=1; ver docs):
+    verificar-produccion    lista con ✔/✘ lo que falta (no envía documentos); sale 0 solo si todo está ✔.
+    configurar-produccion --prefijo EDSC   consulta el rango en la DIAN y lo activa como numeración de producción.
+    correo-emisor [--nuevo CORREO]         muestra o cambia el correo del emisor.
 Lee DATABASE_URL, DIAN_* y el certificado del entorno. Nunca imprime el PIN, la clave técnica ni la del certificado.
 """
 
 from __future__ import annotations
 
 import argparse
+import hmac
 import os
+import re
 import sys
 import uuid
 from collections.abc import Callable, Mapping
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
 import psycopg
 
-from .facturacion.dian.cliente import ClienteDian, ErrorSeguridadDian, ErrorTransporteDian
-from .facturacion.dian.sobre import URL_HABILITACION
+from .facturacion.dian.cliente import ClienteDian, ConsultaRangos, ErrorSeguridadDian, ErrorTransporteDian
+from .facturacion.dian.sobre import URL_HABILITACION, url_servicio
 from .facturacion.documentos import ClienteInvalido
-from .facturacion.firma import FirmaError, certificado_desde_entorno
+from .facturacion.firma import FirmaError, certificado_desde_entorno, es_certificado_de_prueba
 from .facturacion.modelos import Cliente
 from .servicios import clientes
-from .servicios._bd import auditar
+from .servicios._bd import ahora_local, auditar
 from .servicios.emision import Origen, ServicioEmision
 from .servicios.ventas import registrar_venta_manual
 
@@ -40,6 +47,12 @@ NUMERACION_SET: dict[str, Any] = dict(
 # Venta SINTÉTICA de prueba (el ejemplo real analizado: 1,861 gal a $15.990 = $29.757 cobrados).
 VOLUMEN, PPU, VALOR = Decimal("1.861"), Decimal("15990"), Decimal("29757")
 DOCUMENTO_PRUEBA = "1000000001"
+# Mismo patrón que el CHECK de estacion.email (migración 0002).
+PATRON_CORREO = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]{2,}")
+ACCIONES_DE_PRODUCCION = {"configurar-produccion", "verificar-produccion"}
+# Trabajos que hablan con la DIAN: los de habilitación (ambiente 2) no pueden quedar en la cola al pasar a producción.
+SQL_PENDIENTES_DE_HABILITACION = """SELECT count(*) FROM outbox o JOIN factura f ON f.id = o.factura_id
+    WHERE o.estado = 'PENDIENTE' AND o.tipo IN ('ENVIAR_DIAN', 'CONSULTAR_DIAN') AND f.ambiente = '2'"""
 
 
 def _err(texto: str) -> None:
@@ -66,10 +79,20 @@ def main(
     env.add_argument("--usuario", required=True, help="login de un usuario ADMIN (queda en la auditoría)")
     env.add_argument("--correo", help="a dónde llega el ZIP de las facturas de prueba (por defecto, el de la estación)")
     sub.add_parser("estado", help="facturas del set y lo que respondió la DIAN")
+    sub.add_parser("verificar-produccion", help="revisa si todo está listo para producción (no envía documentos)")
+    prod = sub.add_parser("configurar-produccion", help="activa la numeración de producción que la DIAN tiene asociada")
+    prod.add_argument("--prefijo", required=True, help="prefijo del rango de producción, p. ej. EDSC")
+    correo = sub.add_parser("correo-emisor", help="muestra o cambia el correo del emisor")
+    correo.add_argument("--nuevo", help="el correo nuevo (pide confirmación)")
     args = ap.parse_args(argv)
 
     entorno = os.environ if entorno is None else entorno
-    if entorno.get("DIAN_AMBIENTE", "").strip() != "2":  # esta herramienta es solo del set de pruebas
+    ambiente = entorno.get("DIAN_AMBIENTE", "").strip()
+    if args.accion in ACCIONES_DE_PRODUCCION:
+        if ambiente != "1":
+            _err('DIAN_AMBIENTE debe ser "1" (producción) para este comando')
+            return 2
+    elif args.accion != "correo-emisor" and ambiente != "2":  # el resto es solo del set de pruebas
         _err('DIAN_AMBIENTE debe ser "2" (habilitación)')
         return 2
     dsn = entorno.get("DATABASE_URL", "").strip()
@@ -85,6 +108,14 @@ def main(
             return _probar(entorno, estacion[1], cliente_dian)
         if args.accion == "configurar-numeracion":
             return _configurar(conn, estacion[0], confirmar)
+        if args.accion == "verificar-produccion":
+            return _verificar_produccion(conn, entorno, estacion[0], estacion[1], cliente_dian)
+        if args.accion == "configurar-produccion":
+            return _configurar_produccion(
+                conn, entorno, estacion[0], estacion[1], args.prefijo, confirmar, cliente_dian
+            )
+        if args.accion == "correo-emisor":
+            return _correo_emisor(conn, estacion[0], estacion[2], args.nuevo, confirmar)
         if args.accion == "enviar":
             return _enviar(conn, entorno, args.correo or estacion[2], args.cantidad, args.usuario, confirmar)
         return _estado(conn)
@@ -149,6 +180,188 @@ def _configurar(conn: Conexion, estacion_id: int, confirmar: Callable[[str], str
             conn.execute("UPDATE numeracion SET activa = TRUE WHERE id = %s", (fila[0],))
         auditar(conn, "NUMERACION_SET_ACTIVADA", "estacion", estacion_id, detalle={"prefijo": n["prefijo"]})
     print(f"Numeración {n['prefijo']} {n['desde']}-{n['hasta']} activa.")
+    return 0
+
+
+def _pendientes_de_habilitacion(conn: Conexion) -> int:
+    fila = conn.execute(SQL_PENDIENTES_DE_HABILITACION).fetchone()
+    return int(fila[0]) if fila else 0
+
+
+def _cliente_produccion(entorno: Mapping[str, str]) -> ClienteDian:
+    return ClienteDian(url_servicio("1"), certificado_desde_entorno(entorno))
+
+
+def _consultar_rangos(
+    entorno: Mapping[str, str], nit: str, cliente_dian: ClienteDian | None
+) -> tuple[ConsultaRangos | None, str]:
+    """(respuesta de GetNumberingRange en producción, motivo si no se pudo). Sin secretos en el motivo."""
+    software_id = entorno.get("DIAN_SOFTWARE_ID", "").strip()
+    if not software_id:
+        return None, "falta DIAN_SOFTWARE_ID"
+    try:
+        cliente = cliente_dian or _cliente_produccion(entorno)
+        return cliente.rangos_numeracion(nit, software_id), ""
+    except FirmaError as e:
+        return None, f"certificado: {e}"
+    except ErrorSeguridadDian as e:
+        return None, f"la DIAN rechazó la seguridad del mensaje: {e}"
+    except ErrorTransporteDian as e:
+        return None, f"sin respuesta útil de la DIAN: {e}"
+
+
+def _configurar_produccion(
+    conn: Conexion,
+    entorno: Mapping[str, str],
+    estacion_id: int,
+    nit: str,
+    prefijo: str,
+    confirmar: Callable[[str], str],
+    cliente_dian: ClienteDian | None,
+) -> int:
+    pendientes = _pendientes_de_habilitacion(conn)
+    if pendientes:
+        _err(
+            f"hay {pendientes} documento(s) de habilitación (ambiente 2) pendientes en la cola de envíos: "
+            "no se configura producción mientras existan; resuélvalos primero"
+        )
+        return 1
+    r, motivo = _consultar_rangos(entorno, nit, cliente_dian)
+    if r is None:
+        _err(motivo)
+        return 1
+    rango = next((x for x in r.rangos if x.prefijo == prefijo), None)
+    if rango is None:
+        _err(f"la DIAN no tiene un rango de producción con el prefijo {prefijo}")
+        return 1
+    clave = entorno.get("DIAN_CLAVE_TECNICA", "").strip()
+    if not rango.clave_tecnica or not hmac.compare_digest(rango.clave_tecnica, clave):
+        _err(
+            f"la clave técnica del rango {prefijo} en la DIAN no coincide con DIAN_CLAVE_TECNICA: no se configuró nada"
+        )
+        return 1
+    try:
+        vigente_desde, vigente_hasta = date.fromisoformat(rango.vigente_desde), date.fromisoformat(rango.vigente_hasta)
+    except ValueError:
+        _err("la DIAN devolvió una vigencia que no se entiende: no se configuró nada")
+        return 1
+    print(
+        f"Resolución {rango.resolucion}: {rango.prefijo} {rango.desde}-{rango.hasta}, "
+        f"vigente del {vigente_desde} al {vigente_hasta}"
+    )
+    if (
+        confirmar(f"Activar esta numeración de PRODUCCIÓN? Escriba el prefijo {prefijo} para confirmar: ").strip()
+        != prefijo
+    ):
+        _err("cancelado: no se cambió nada")
+        return 1
+    with conn.transaction():
+        fila = conn.execute(
+            "SELECT id, desde, hasta, ambiente FROM numeracion WHERE prefijo = %s AND numero_resolucion = %s",
+            (prefijo, rango.resolucion),
+        ).fetchone()
+        if fila is not None and (fila[1], fila[2], fila[3]) != (rango.desde, rango.hasta, "1"):
+            _err(f"ya existe la numeración {prefijo}/{rango.resolucion} con otro rango o ambiente; revísela primero")
+            return 1  # todavía no se modificó nada
+        conn.execute("UPDATE numeracion SET activa = FALSE WHERE estacion_id = %s AND activa", (estacion_id,))
+        if fila is None:
+            conn.execute(
+                """INSERT INTO numeracion (estacion_id, prefijo, numero_resolucion, desde, hasta, siguiente,
+                                           vigente_desde, vigente_hasta, activa, ambiente)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE, '1')""",
+                (estacion_id, prefijo, rango.resolucion, rango.desde, rango.hasta, rango.desde,
+                 vigente_desde, vigente_hasta),
+            )  # fmt: skip
+        else:  # ya existe: se reactiva SIN tocar `siguiente`
+            conn.execute("UPDATE numeracion SET activa = TRUE WHERE id = %s", (fila[0],))
+        auditar(conn, "NUMERACION_PRODUCCION_ACTIVADA", "estacion", estacion_id, detalle={"prefijo": prefijo})
+    print(f"Numeración de producción {prefijo} {rango.desde}-{rango.hasta} activa.")
+    return 0
+
+
+def _verificar_produccion(
+    conn: Conexion, entorno: Mapping[str, str], estacion_id: int, nit: str, cliente_dian: ClienteDian | None
+) -> int:
+    revisiones: list[tuple[bool, str]] = []
+
+    def revisar(ok: bool, texto: str) -> None:
+        revisiones.append((ok, texto))
+
+    faltan = [
+        n for n in ("DIAN_SOFTWARE_ID", "DIAN_SOFTWARE_PIN", "DIAN_CLAVE_TECNICA") if not entorno.get(n, "").strip()
+    ]
+    revisar(not faltan, "variables DIAN presentes" if not faltan else f"faltan variables: {', '.join(faltan)}")
+    revisar(
+        not entorno.get("DIAN_TEST_SET_ID", "").strip(),
+        "DIAN_TEST_SET_ID vacío" if not entorno.get("DIAN_TEST_SET_ID", "").strip()
+        else "DIAN_TEST_SET_ID debe estar vacío en producción (es del set de pruebas)",
+    )  # fmt: skip
+    try:
+        cert = certificado_desde_entorno(entorno)
+    except FirmaError as e:  # el mensaje nunca lleva la clave
+        revisar(False, f"certificado: {e}")
+    else:
+        ahora = datetime.now(UTC)
+        vence = cert.cert.not_valid_after_utc
+        vigente = cert.cert.not_valid_before_utc <= ahora <= vence
+        revisar(vigente, f"certificado vigente, vence en {(vence - ahora).days} día(s)" if vigente
+                else f"certificado fuera de vigencia (vence {vence:%Y-%m-%d})")  # fmt: skip
+        de_prueba = es_certificado_de_prueba(cert)
+        revisar(not de_prueba, "certificado de la empresa" if not de_prueba else "el certificado es de PRUEBA")
+    activa = conn.execute(
+        """SELECT prefijo, ambiente, siguiente, hasta, vigente_desde, vigente_hasta FROM numeracion
+           WHERE estacion_id = %s AND activa""",
+        (estacion_id,),
+    ).fetchone()
+    prefijo_activo = None
+    if activa is None or activa[1] != "1":
+        revisar(False, "no hay una numeración activa de producción (ambiente 1): use configurar-produccion")
+    else:
+        prefijo_activo, _, siguiente, hasta, desde_vig, hasta_vig = activa
+        hoy = ahora_local().date()
+        revisar(desde_vig <= hoy <= hasta_vig, f"numeración {prefijo_activo} vigente hasta {hasta_vig}"
+                if desde_vig <= hoy <= hasta_vig else f"numeración {prefijo_activo} fuera de vigencia")  # fmt: skip
+        revisar(siguiente <= hasta, f"numeración {prefijo_activo}: quedan {hasta - siguiente + 1} consecutivos"
+                if siguiente <= hasta else f"numeración {prefijo_activo} agotada")  # fmt: skip
+    r, motivo = _consultar_rangos(entorno, nit, cliente_dian)
+    if r is None:
+        revisar(False, f"GetNumberingRange: {motivo}")
+    else:
+        revisar(True, "GetNumberingRange responde")
+        if prefijo_activo is not None:
+            esta = any(x.prefijo == prefijo_activo for x in r.rangos)
+            revisar(esta, f"la DIAN tiene el prefijo {prefijo_activo}" if esta
+                    else f"la DIAN no devolvió el prefijo {prefijo_activo}")  # fmt: skip
+    smtp = bool(entorno.get("ESTACION_SMTP_USUARIO", "").strip())
+    revisar(smtp, "SMTP configurado" if smtp else "falta ESTACION_SMTP_USUARIO (el correo saldría sin cuenta)")
+    pendientes = _pendientes_de_habilitacion(conn)
+    revisar(
+        pendientes == 0,
+        "sin documentos de habilitación pendientes en la cola" if not pendientes
+        else f"{pendientes} documento(s) de habilitación (ambiente 2) pendientes en la cola de envíos",
+    )  # fmt: skip
+    for ok, texto in revisiones:
+        print(f"{'✔' if ok else '✘'} {texto}")
+    return 0 if all(ok for ok, _ in revisiones) else 1
+
+
+def _correo_emisor(
+    conn: Conexion, estacion_id: int, actual: str, nuevo: str | None, confirmar: Callable[[str], str]
+) -> int:
+    print(f"Correo del emisor: {actual}")
+    if nuevo is None:
+        return 0
+    nuevo = nuevo.strip().lower()
+    if not PATRON_CORREO.fullmatch(nuevo):
+        _err("el correo nuevo no es válido: no se cambió nada")
+        return 2
+    if confirmar(f"Cambiar el correo del emisor a {nuevo}? Escriba SI: ").strip() != "SI":
+        _err("cancelado: no se cambió nada")
+        return 1
+    with conn.transaction():
+        conn.execute("UPDATE estacion SET email = %s WHERE id = %s", (nuevo, estacion_id))
+        auditar(conn, "EMISOR_CORREO_CAMBIADO", "estacion", estacion_id)  # sin el correo: es dato personal
+    print("Correo del emisor actualizado.")
     return 0
 
 

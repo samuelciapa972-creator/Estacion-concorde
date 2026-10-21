@@ -14,7 +14,7 @@ import ssl
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from lxml import etree
@@ -77,6 +77,7 @@ class RangoNumeracion:
     hasta: int
     vigente_desde: str
     vigente_hasta: str
+    clave_tecnica: str = field(default="", repr=False)  # SECRETO: solo para comparar; nunca sale en repr ni en logs
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +144,7 @@ class ClienteDian:
                 hasta=_entero(_texto(n, "ToNumber")),
                 vigente_desde=_texto(n, "ValidDateFrom"),
                 vigente_hasta=_texto(n, "ValidDateTo"),
+                clave_tecnica=_texto(n, "TechnicalKey"),
             )  # fmt: skip
             for n in _hijos(r, "NumberRangeResponse")
         )

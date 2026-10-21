@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from datetime import datetime, timedelta
 
@@ -444,3 +445,51 @@ def test_el_segundo_reenvio_espera(escenario, conn, recursos):
     vencer(escenario)
     _envio_incierto_y_consulta(escenario, conn, proveedor, politica, recursos)
     assert escenario.datos.uno(pendiente, (f.id,)) is True  # el segundo espera
+
+
+class ProveedorQueNoDebeUsarse:
+    """Si la cola lo llama, la factura habría salido hacia la DIAN: el test lo registra."""
+
+    def __init__(self):
+        self.llamadas: list[str] = []
+
+    def emitir(self, solicitud):
+        self.llamadas.append("emitir")
+        raise AssertionError("no se debe enviar")
+
+    def consultar(self, **kw):
+        self.llamadas.append("consultar")
+        raise AssertionError("no se debe consultar")
+
+
+@pytest.mark.parametrize("tipo", [TipoTrabajo.ENVIAR_DIAN, TipoTrabajo.CONSULTAR_DIAN])
+def test_factura_de_otro_ambiente_no_se_firma_ni_se_envia(escenario, conn, recursos, tipo):
+    # Una factura de habilitación ('2') quedó en la cola y el worker pasó a producción ('1'): falla cerrado.
+    f, _ = solicitar(escenario, conn)
+    assert escenario.datos.uno("SELECT ambiente FROM factura WHERE id = %s", (f.id,)) == "2"
+    if tipo == TipoTrabajo.CONSULTAR_DIAN:
+        conn.execute("UPDATE outbox SET tipo = 'CONSULTAR_DIAN' WHERE factura_id = %s", (f.id,))
+    proveedor = ProveedorQueNoDebeUsarse()
+    en_produccion = dataclasses.replace(recursos, ambiente="1")
+
+    hechos = procesar_pendientes(conn, proveedor, recursos=en_produccion)
+
+    assert proveedor.llamadas == []  # nada llegó al transporte
+    assert [(h.factura_id, h.tipo) for h in hechos] == [(f.id, tipo)]
+    estado, error, *_ = factura(escenario, f.id)
+    assert (estado, error) == ("EN_PROCESO", None)  # la factura no cambia
+    assert escenario.datos.uno("SELECT xml_firmado FROM factura WHERE id = %s", (f.id,)) is None  # no se firmó
+    trabajo = escenario.datos.conn.execute(
+        "SELECT estado, intentos, ultimo_error FROM outbox WHERE factura_id = %s", (f.id,)
+    ).fetchone()
+    assert trabajo[:2] == ("FALLIDO", 1)  # terminado en error, sin reintento en bucle
+    assert "ambiente 2" in trabajo[2] and "ambiente 1" in trabajo[2]
+    assert acciones(escenario, f.id)[-1] == "AMBIENTE_NO_COINCIDE"
+    assert procesar_pendientes(conn, proveedor, recursos=en_produccion) == []  # y no vuelve a salir
+
+
+def test_factura_del_mismo_ambiente_se_envia_normal(escenario, conn, recursos):
+    f, _ = solicitar(escenario, conn)
+    hechos = procesar_pendientes(conn, ProveedorSimulado(), recursos=dataclasses.replace(recursos, ambiente="2"))
+    assert [h.tipo for h in hechos] == [TipoTrabajo.ENVIAR_DIAN, TipoTrabajo.ENVIAR_CORREO]
+    assert factura(escenario, f.id)[0] == "FACTURADO"

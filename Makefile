@@ -13,6 +13,8 @@
 #   make worker        procesa la cola de envíos con el proveedor SIMULADO (no envía nada a la DIAN)
 #   make worker-dian   procesa la cola enviando al ambiente de HABILITACIÓN de la DIAN (certificado real en .env)
 #   make habilitacion-probar   prueba certificado, firma y conexión con la DIAN (no envía documentos)
+#   make verificar-produccion  revisa si todo está listo para producción (DIAN_AMBIENTE=1; no envía documentos)
+#   make configurar-produccion PREFIJO=EDSC   activa la numeración de producción que la DIAN tiene asociada
 #   make mail          buzón de PRUEBA (Mailpit): recibe los correos de las facturas en http://localhost:8025
 #   make correo-prueba DESTINO=x@correo.com   envía un correo de prueba (sin factura) con la configuración del .env
 #   make certificado   genera el certificado de PRUEBA para firmar (datos/certificado-prueba.pfx, fuera de git)
@@ -42,7 +44,7 @@ DATABASE_URL ?= postgresql://estacion:estacion@localhost:5432/estacion
 export DATABASE_URL
 
 .PHONY: install up migrate down db-reset test test-back test-rapido test-web lint lint-back lint-web format \
-        simulador worker worker-dian habilitacion-probar mail correo-prueba certificado api web web-build tipos stack stack-simulador stack-logs stack-down stack-usuario ca
+        simulador worker worker-dian habilitacion-probar verificar-produccion configurar-produccion mail correo-prueba certificado api web web-build tipos stack stack-simulador stack-logs stack-down stack-usuario ca
 
 install:
 	cd $(BACK) && uv venv --python 3.12 $(VENV) && uv pip install --python $(PY) -e ".[dev]"

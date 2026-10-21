@@ -165,7 +165,8 @@ def test_rangos_de_numeracion(certificado):
     r = cliente(certificado, t).rangos_numeracion("901335327", "sw-id")
     assert r.codigo == "100" and len(r.rangos) == 1
     assert (r.rangos[0].prefijo, r.rangos[0].desde, r.rangos[0].hasta) == ("SETP", 990000000, 995000000)
-    assert "no-se-guarda" not in repr(r)  # la clave técnica no se conserva
+    assert r.rangos[0].clave_tecnica == "no-se-guarda"  # se conserva para compararla con la configurada...
+    assert "no-se-guarda" not in repr(r)  # ...pero nunca sale en el repr (logs, trazas)
     assert b"<wcf:accountCode>901335327</wcf:accountCode>" in t.llamadas[0][2]
     assert b"<wcf:softwareCode>sw-id</wcf:softwareCode>" in t.llamadas[0][2]
 

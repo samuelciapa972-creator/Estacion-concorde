@@ -91,7 +91,9 @@ def main(argv: list[str] | None = None) -> int:
     except FirmaError as e:  # el mensaje nunca lleva la clave
         error_certificado = str(e)
         log.error("sin certificado de firma (%s): las facturas esperan en la cola sin enviarse", e)
-    recursos = Recursos(certificado, enviador, error_certificado)
+    ambiente = os.environ.get("DIAN_AMBIENTE", "").strip()
+    # Sin ambiente válido el proveedor DIAN no arranca; con el simulado, lo que corresponde es el de habilitación.
+    recursos = Recursos(certificado, enviador, error_certificado, ambiente if ambiente in AMBIENTES_PERMITIDOS else "2")
 
     with psycopg.connect(dsn, autocommit=True) as conn:
         try:

@@ -23,6 +23,10 @@ Antes de emitir, el documento se FIRMA (`facturacion/firma.py`) y se guarda en `
 puede corregir) y solo al agotarla queda FALLIDO. Al quedar FACTURADA se guarda la respuesta de la DIAN
 (`application_response`) y se encola ENVIAR_CORREO, en la misma transacción.
 
+Una factura de OTRO ambiente que el del worker (`factura.ambiente` vs `Recursos.ambiente`; p. ej. una de habilitación
+que quedó en la cola al pasar a producción) NO se firma, ni se envía, ni se consulta: el trabajo queda FALLIDO con el
+motivo y se audita (`AMBIENTE_NO_COINCIDE`). No se reintenta: el ambiente de la factura no cambia solo.
+
 Resultados de ENVIAR_CORREO (entrega al cliente, ver `facturacion/paquete.py`):
     primera vez     -> arma el ZIP (AttachedDocument firmado + PDF) y lo guarda en `entrega`; los reintentos y los
                        reenvíos mandan ESE MISMO archivo
@@ -84,6 +88,7 @@ class Recursos:
     certificado: Certificado | None
     enviador: EnviadorCorreo
     error_certificado: str = ""
+    ambiente: str = "2"  # DIAN_AMBIENTE del worker: solo se envían/consultan facturas de ESTE ambiente
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +113,7 @@ class _Factura:
     fecha_emision: Any
     xml: str
     track_id: str | None  # ZipKey de un envío asíncrono (set de pruebas), o None
+    ambiente: str  # "1" producción, "2" habilitación (el de la numeración con que se emitió)
 
 
 def procesar_siguiente(
@@ -155,7 +161,11 @@ def _procesar_uno(
         armado = False
         try:
             with conn.transaction():  # punto de guardado: un error inesperado deshace SOLO este paso
-                if tipo == TipoTrabajo.ENVIAR_DIAN:
+                if tipo in (TipoTrabajo.ENVIAR_DIAN, TipoTrabajo.CONSULTAR_DIAN) and _ambiente_ajeno(
+                    conn, trabajo_id, factura, recursos
+                ):
+                    estado = factura.estado  # ni se firma, ni se envía, ni se consulta: queda FALLIDO
+                elif tipo == TipoTrabajo.ENVIAR_DIAN:
                     estado = _enviar(conn, proveedor, politica, trabajo_id, intentos, factura, recursos)
                 elif tipo == TipoTrabajo.ENVIAR_CORREO:
                     estado, armado = _entregar(conn, politica, trabajo_id, intentos, factura, recursos)
@@ -193,15 +203,17 @@ def procesar_pendientes(
 def _leer_factura(conn: Conexion, factura_id: int) -> _Factura:
     fila = conn.execute(
         """SELECT id, estado, clave_emision, despacho_id, venta_manual_id, cliente_id, usuario_id, numero, cufe,
-                  medio_pago, fecha_emision, xml_sin_firmar, dian_track_id
+                  medio_pago, fecha_emision, xml_sin_firmar, dian_track_id, ambiente
            FROM factura WHERE id = %s FOR UPDATE""",
         (factura_id,),
     ).fetchone()
     assert fila is not None, "la FK de outbox garantiza que la factura existe"
-    fid, estado, clave, despacho_id, venta_id, cliente_id, usuario_id, numero, cufe, medio, fecha, xml, track = fila
+    fid, estado, clave, despacho_id, venta_id, cliente_id, usuario_id, numero, cufe, medio, fecha, xml, track, amb = (
+        fila
+    )
     origen = Origen("despacho", despacho_id) if despacho_id is not None else Origen("venta_manual", venta_id)
     return _Factura(
-        fid, EstadoFactura(estado), clave, origen, cliente_id, usuario_id, numero, cufe, medio, fecha, xml, track
+        fid, EstadoFactura(estado), clave, origen, cliente_id, usuario_id, numero, cufe, medio, fecha, xml, track, amb
     )
 
 
@@ -218,6 +230,21 @@ def _solicitud(conn: Conexion, f: _Factura, documento: bytes) -> SolicitudFactur
         cufe=f.cufe,
         documento=documento,  # el XML FIRMADO
     )
+
+
+def _ambiente_ajeno(conn: Conexion, trabajo_id: int, f: _Factura, recursos: Recursos) -> bool:
+    """True si la factura es de otro ambiente DIAN que el del worker (p. ej. una de habilitación quedó en la cola y se
+    pasó a producción): se cierra el trabajo en FALLIDO y no se firma ni se habla con la DIAN. No se reintenta: el
+    ambiente de la factura no cambia solo; lo resuelve una persona (con el ambiente correcto o descartándola)."""
+    if f.ambiente == recursos.ambiente:
+        return False
+    _terminar(
+        conn, trabajo_id, "FALLIDO",
+        error=f"la factura es del ambiente {f.ambiente} y el worker está en ambiente {recursos.ambiente}: no se envió",
+    )  # fmt: skip
+    detalle = {"numero": f.numero, "ambiente_factura": f.ambiente, "ambiente_worker": recursos.ambiente}
+    auditar(conn, "AMBIENTE_NO_COINCIDE", "factura", f.id, detalle=detalle)
+    return True
 
 
 def _firmar(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from conftest import ENTORNO_DIAN
@@ -146,3 +148,207 @@ def test_enviar_con_correo_invalido_no_crea_nada(escenario):
     argv = ["enviar", "--usuario", login, "--correo", "no-es-correo"]
     assert habilitacion.main(argv, entorno=entorno(escenario), confirmar=lambda _: "ENVIAR") == 2
     assert escenario.datos.uno("SELECT count(*) FROM factura") == 0
+
+
+# ------------------------------------------------------------------------------------------ producción
+CLAVE_PFX = "clave-pfx-de-prueba"
+CLAVE_TECNICA = ENTORNO_DIAN["DIAN_CLAVE_TECNICA"]
+RANGO_EDSC = dict(prefijo="EDSC", resolucion="18764000000001", desde=1, hasta=1000000,
+                  vigente_desde="2026-10-01", vigente_hasta="2036-10-01", clave_tecnica=CLAVE_TECNICA)  # fmt: skip
+
+
+def dian_produccion(**cambios):
+    return DianFalsa(ConsultaRangos("100", "OK", (RangoNumeracion(**{**RANGO_EDSC, **cambios}),)))
+
+
+def certificado_pfx(tmp_path, *, de_prueba: bool) -> str:
+    """Un .pfx autofirmado: con la marca de prueba, o con el nombre de una empresa."""
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID
+
+    from estacion.facturacion.certificado_prueba import MARCA, generar_certificado_prueba, guardar_pfx
+    from estacion.facturacion.firma import Certificado
+
+    c = generar_certificado_prueba("EDS")
+    if not de_prueba:
+        nombre = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "ESTACION REAL SAS")])
+        cert = (
+            x509.CertificateBuilder().subject_name(nombre).issuer_name(nombre).public_key(c.cert.public_key())
+            .serial_number(1).not_valid_before(c.cert.not_valid_before_utc)
+            .not_valid_after(c.cert.not_valid_after_utc).sign(c.clave, c.cert.signature_hash_algorithm)
+        )  # fmt: skip
+        c = Certificado(c.clave, cert)
+        assert MARCA not in str(cert.subject)
+    ruta = tmp_path / ("prueba.pfx" if de_prueba else "empresa.pfx")
+    guardar_pfx(c, ruta, CLAVE_PFX)
+    return str(ruta)
+
+
+def entorno_produccion(escenario, tmp_path, **extra):
+    propios = dict(
+        DIAN_AMBIENTE="1", DIAN_CERTIFICADO_RUTA=certificado_pfx(tmp_path, de_prueba=False),
+        DIAN_CERTIFICADO_CLAVE=CLAVE_PFX, ESTACION_SMTP_USUARIO="alista@example.com",
+    )  # fmt: skip
+    return entorno(escenario, **{**propios, **extra})
+
+
+def activa_edsc(escenario):
+    """La numeración EDSC de producción activa (lo que deja configurar-produccion)."""
+    c = escenario.datos.conn
+    c.execute("UPDATE numeracion SET activa = FALSE")
+    c.execute(
+        """INSERT INTO numeracion (estacion_id, prefijo, numero_resolucion, desde, hasta, siguiente, vigente_desde,
+                                   vigente_hasta, activa, ambiente)
+           VALUES (%s, 'EDSC', '18764000000001', 1, 1000000, 1, '2026-10-01', '2036-10-01', TRUE, '1')""",
+        (escenario.estacion,),
+    )
+
+
+def pendiente_de_habilitacion(escenario) -> None:
+    """Una factura de habilitación (ambiente 2) con su envío esperando en la cola."""
+    from estacion.servicios.emision import Origen, ServicioEmision
+
+    ServicioEmision(entorno=ENTORNO_DIAN).solicitar(
+        escenario.datos.conn, clave=uuid.uuid4().hex, origen=Origen("despacho", escenario.datos.despacho()),
+        cliente_id=escenario.cliente, usuario_id=escenario.usuario, medio_pago="EFECTIVO",
+    )  # fmt: skip
+
+
+def numeraciones(escenario):
+    return escenario.datos.conn.execute(
+        "SELECT prefijo, ambiente, siguiente, activa FROM numeracion ORDER BY id"
+    ).fetchall()
+
+
+def test_configurar_produccion_activa_edsc(escenario, tmp_path, capsys):
+    dian = dian_produccion()
+    e = entorno_produccion(escenario, tmp_path)
+    assert habilitacion.main(["configurar-produccion", "--prefijo", "EDSC"], entorno=e,
+                             confirmar=lambda _: "EDSC", cliente_dian=dian) == 0  # fmt: skip
+    assert numeraciones(escenario) == [("SETP", "2", 1, False), ("EDSC", "1", 1, True)]
+    assert dian.llamadas == [("900123456", ENTORNO_DIAN["DIAN_SOFTWARE_ID"])]
+    salida = capsys.readouterr().out
+    assert "18764000000001" in salida and "1-1000000" in salida and CLAVE_TECNICA not in salida
+    assert escenario.datos.uno("SELECT count(*) FROM auditoria WHERE accion = 'NUMERACION_PRODUCCION_ACTIVADA'") == 1
+
+
+def test_configurar_produccion_sin_confirmar_no_cambia_nada(escenario, tmp_path):
+    e = entorno_produccion(escenario, tmp_path)
+    assert habilitacion.main(["configurar-produccion", "--prefijo", "EDSC"], entorno=e,
+                             confirmar=lambda _: "no", cliente_dian=dian_produccion()) == 1  # fmt: skip
+    assert numeraciones(escenario) == [("SETP", "2", 1, True)]
+
+
+def test_configurar_produccion_clave_tecnica_distinta(escenario, tmp_path, capsys):
+    e = entorno_produccion(escenario, tmp_path)
+    dian = dian_produccion(clave_tecnica="otra-clave-secreta")
+    assert habilitacion.main(["configurar-produccion", "--prefijo", "EDSC"], entorno=e,
+                             confirmar=lambda _: "EDSC", cliente_dian=dian) == 1  # fmt: skip
+    captura = capsys.readouterr()
+    assert "no coincide" in captura.err
+    assert CLAVE_TECNICA not in captura.out + captura.err and "otra-clave-secreta" not in captura.out + captura.err
+    assert numeraciones(escenario) == [("SETP", "2", 1, True)]
+
+
+def test_configurar_produccion_prefijo_que_la_dian_no_tiene(escenario, tmp_path):
+    e = entorno_produccion(escenario, tmp_path)
+    assert habilitacion.main(["configurar-produccion", "--prefijo", "XXXX"], entorno=e,
+                             confirmar=lambda _: "XXXX", cliente_dian=dian_produccion()) == 1  # fmt: skip
+    assert numeraciones(escenario) == [("SETP", "2", 1, True)]
+
+
+def test_configurar_produccion_exige_ambiente_1(escenario):
+    assert habilitacion.main(["configurar-produccion", "--prefijo", "EDSC"], entorno=entorno(escenario),
+                             confirmar=lambda _: "EDSC", cliente_dian=dian_produccion()) == 2  # fmt: skip
+
+
+def test_configurar_produccion_se_niega_con_pendientes_de_habilitacion(escenario, tmp_path, capsys):
+    pendiente_de_habilitacion(escenario)
+    dian = dian_produccion()
+    e = entorno_produccion(escenario, tmp_path)
+    assert habilitacion.main(["configurar-produccion", "--prefijo", "EDSC"], entorno=e,
+                             confirmar=lambda _: "EDSC", cliente_dian=dian) == 1  # fmt: skip
+    assert "1 documento(s) de habilitación" in capsys.readouterr().err
+    assert numeraciones(escenario) == [("SETP", "2", 2, True)]  # la SETP sigue activa
+    assert dian.llamadas == []  # ni siquiera consulta a la DIAN
+
+
+def verificar(escenario, tmp_path, capsys, *, dian=None, **extra):
+    e = entorno_produccion(escenario, tmp_path, **extra)
+    codigo = habilitacion.main(["verificar-produccion"], entorno=e, cliente_dian=dian or dian_produccion())
+    return codigo, capsys.readouterr().out
+
+
+def test_verificar_produccion_todo_bien(escenario, tmp_path, capsys):
+    activa_edsc(escenario)
+    codigo, salida = verificar(escenario, tmp_path, capsys)
+    assert codigo == 0 and "✘" not in salida
+    assert "certificado vigente" in salida and "GetNumberingRange responde" in salida
+    assert CLAVE_TECNICA not in salida and CLAVE_PFX not in salida
+
+
+def test_verificar_produccion_con_test_set_id(escenario, tmp_path, capsys):
+    activa_edsc(escenario)
+    codigo, salida = verificar(escenario, tmp_path, capsys, DIAN_TEST_SET_ID="algo")
+    assert codigo != 0 and "✘ DIAN_TEST_SET_ID" in salida
+
+
+def test_verificar_produccion_certificado_de_prueba(escenario, tmp_path, capsys):
+    activa_edsc(escenario)
+    ruta = certificado_pfx(tmp_path, de_prueba=True)
+    codigo, salida = verificar(escenario, tmp_path, capsys, DIAN_CERTIFICADO_RUTA=ruta)
+    assert codigo != 0 and "✘ el certificado es de PRUEBA" in salida
+
+
+def test_verificar_produccion_sin_numeracion_de_produccion(escenario, tmp_path, capsys):
+    codigo, salida = verificar(escenario, tmp_path, capsys)  # solo la SETP (ambiente 2)
+    assert codigo != 0 and "✘ no hay una numeración activa de producción" in salida
+
+
+def test_verificar_produccion_sin_smtp(escenario, tmp_path, capsys):
+    activa_edsc(escenario)
+    codigo, salida = verificar(escenario, tmp_path, capsys, ESTACION_SMTP_USUARIO="")
+    assert codigo != 0 and "✘ falta ESTACION_SMTP_USUARIO" in salida
+
+
+def test_verificar_produccion_prefijo_que_la_dian_no_devuelve(escenario, tmp_path, capsys):
+    activa_edsc(escenario)
+    codigo, salida = verificar(escenario, tmp_path, capsys, dian=dian_produccion(prefijo="OTRO"))
+    assert codigo != 0 and "✘ la DIAN no devolvió el prefijo EDSC" in salida
+
+
+def test_verificar_produccion_con_pendientes_de_habilitacion(escenario, tmp_path, capsys):
+    pendiente_de_habilitacion(escenario)  # primero: la factura se emite con la SETP (ambiente 2) activa
+    activa_edsc(escenario)
+    codigo, salida = verificar(escenario, tmp_path, capsys)
+    assert codigo != 0 and "✘ 1 documento(s) de habilitación (ambiente 2) pendientes" in salida
+
+
+def test_verificar_produccion_exige_ambiente_1(escenario):
+    assert habilitacion.main(["verificar-produccion"], entorno=entorno(escenario), cliente_dian=dian_produccion()) == 2
+
+
+def test_correo_emisor_muestra_el_actual(escenario, capsys):
+    assert habilitacion.main(["correo-emisor"], entorno=entorno(escenario)) == 0
+    assert "estacion@example.com" in capsys.readouterr().out
+
+
+def test_correo_emisor_cambia_y_audita(escenario):
+    nuevo = "alistaconcordefactutacion@gmail.com"
+    assert habilitacion.main(["correo-emisor", "--nuevo", nuevo], entorno=entorno(escenario),
+                             confirmar=lambda _: "SI") == 0  # fmt: skip
+    assert escenario.datos.uno("SELECT email FROM estacion WHERE id = %s", (escenario.estacion,)) == nuevo
+    filas = escenario.datos.conn.execute(
+        "SELECT detalle::text FROM auditoria WHERE accion = 'EMISOR_CORREO_CAMBIADO'"
+    ).fetchall()
+    assert len(filas) == 1 and nuevo not in filas[0][0]  # la auditoría no guarda el correo
+
+
+def test_correo_emisor_invalido_o_sin_confirmar_no_cambia_nada(escenario):
+    e = entorno(escenario)
+    assert habilitacion.main(["correo-emisor", "--nuevo", "no-es-correo"], entorno=e, confirmar=lambda _: "SI") != 0
+    assert habilitacion.main(["correo-emisor", "--nuevo", "otro@example.com"], entorno=e, confirmar=lambda _: "no") != 0
+    assert (
+        escenario.datos.uno("SELECT email FROM estacion WHERE id = %s", (escenario.estacion,)) == "estacion@example.com"
+    )
+    assert escenario.datos.uno("SELECT count(*) FROM auditoria WHERE accion = 'EMISOR_CORREO_CAMBIADO'") == 0
