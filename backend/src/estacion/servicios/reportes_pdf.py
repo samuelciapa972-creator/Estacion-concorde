@@ -230,9 +230,10 @@ def reporte(
     )  # fmt: skip
 
 
-def contador(conn: Conexion, desde: date, hasta: date, *, comprimir: bool = True) -> bytes:
-    """Libro de facturas y resumen diario, en horizontal. El CUFE completo va en el Excel (aquí no cabe)."""
-    facturas = exportacion_contador.facturas(conn, desde, hasta)
+def contador(conn: Conexion, desde: date, hasta: date, ambiente: str, *, comprimir: bool = True) -> bytes:
+    """Libro de facturas (con notas crédito en negativo) y resumen diario, en horizontal. El CUFE completo va en el
+    Excel (aquí no cabe)."""
+    facturas = exportacion_contador.facturas(conn, desde, hasta, ambiente)
     dias = exportacion_contador.resumen_diario(conn, desde, hasta)
     cuerpo: list[Any] = [_nota("<b>Facturas</b> (por fecha de emisión, en todos los estados)"), Spacer(1, 2 * mm)]
     if facturas:
@@ -240,7 +241,7 @@ def contador(conn: Conexion, desde: date, hasta: date, *, comprimir: bool = True
             [
                 f.fecha.strftime("%d/%m/%Y %H:%M"),
                 f.numero,
-                f.estado,
+                f"{f.estado} (anulada)" if f.anulada else f.estado,
                 f"{f.tipo_documento} {f.documento}",
                 f.cliente[:40],
                 f.producto,

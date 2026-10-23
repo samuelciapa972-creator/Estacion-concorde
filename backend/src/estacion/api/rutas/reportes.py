@@ -7,7 +7,7 @@ from dataclasses import asdict
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import Response
 
 from ...servicios import exportacion_contador, reportes_bd, reportes_pdf
@@ -82,15 +82,21 @@ def exportar(conn: Conn, _: SesionAdmin, surtidor_id: int, desde: date, hasta: d
     summary="Ventas y facturas para la contabilidad (formato PROVISIONAL; lleva datos personales)",
 )
 def contador(
-    conn: Conn, sesion: SesionAdmin, desde: date, hasta: date, formato: Literal["xlsx", "csv", "pdf"] = "xlsx"
+    request: Request,
+    conn: Conn,
+    sesion: SesionAdmin,
+    desde: date,
+    hasta: date,
+    formato: Literal["xlsx", "csv", "pdf"] = "xlsx",
 ) -> Response:
     exigir_rango(desde, hasta, hasta_incluido=True)
+    ambiente = request.app.state.anulacion.ambiente_actual  # el de DIAN_AMBIENTE
     if formato == "csv":
-        contenido, tipo = exportacion_contador.csv_facturas(conn, desde, hasta), "text/csv; charset=utf-8"
+        contenido, tipo = exportacion_contador.csv_facturas(conn, desde, hasta, ambiente), "text/csv; charset=utf-8"
     elif formato == "pdf":
-        contenido, tipo = reportes_pdf.contador(conn, desde, hasta), PDF
+        contenido, tipo = reportes_pdf.contador(conn, desde, hasta, ambiente), PDF
     else:
-        contenido, tipo = exportacion_contador.excel(conn, desde, hasta), XLSX
+        contenido, tipo = exportacion_contador.excel(conn, desde, hasta, ambiente), XLSX
     # Lleva datos de clientes: queda quién lo descargó y qué rango (sin datos personales en la auditoría).
     auditar(conn, "EXPORTE_CONTADOR", "factura", f"{desde}/{hasta}", usuario_id=sesion.usuario_id,
             detalle={"desde": desde.isoformat(), "hasta": hasta.isoformat(), "formato": formato})  # fmt: skip
