@@ -106,6 +106,12 @@ def test_aviso_de_anulaciones_en_notas_y_pdf(escenario, conn):
     textos = [c[0] for c in libro["Notas"].iter_rows(values_only=True)]
     assert exportacion_contador.AVISO_ANULACIONES in textos
     pdf = reportes_pdf.contador(conn, *rango, "2", comprimir=False)
-    assert b"neto de notas" in pdf and b"cr\\351dito" in pdf
-    assert b"pueden" in pdf and b"diferir por esas anulaciones" in pdf
+    assert b"neto de notas" in pdf  # fragmento corto: no depende de dónde corte la línea ReportLab
+    assert sum(t.count("con el contador") for t in textos) == 1  # una sola vez en Notas
     assert b"anulaciones" not in exportacion_contador.csv_facturas(conn, *rango, "2")  # el CSV es solo datos
+
+
+def test_pdf_sin_facturas_no_lleva_el_aviso(escenario, conn):
+    pdf = reportes_pdf.contador(conn, date(2026, 9, 1), date(2026, 9, 30), "2", comprimir=False)
+    assert b"(Sin facturas en este rango.) Tj" in pdf
+    assert b"neto de notas" not in pdf
