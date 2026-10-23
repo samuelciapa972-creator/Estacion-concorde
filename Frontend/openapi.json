@@ -70,6 +70,30 @@
         "title": "AnomaliaSalida",
         "type": "object"
       },
+      "AnulacionEntrada": {
+        "additionalProperties": false,
+        "properties": {
+          "clave": {
+            "description": "generada UNA vez por intento de anulación; reintentar con la misma clave no duplica la nota",
+            "pattern": "^[A-Za-z0-9]{16,64}$",
+            "title": "Clave",
+            "type": "string"
+          },
+          "motivo": {
+            "description": "por qué se anula (sale en la nota crédito)",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Motivo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clave",
+          "motivo"
+        ],
+        "title": "AnulacionEntrada",
+        "type": "object"
+      },
       "BusquedaVentasSalida": {
         "properties": {
           "filas": {
@@ -506,6 +530,29 @@
       },
       "FacturaFilaSalida": {
         "properties": {
+          "ambiente": {
+            "enum": [
+              "1",
+              "2"
+            ],
+            "title": "Ambiente",
+            "type": "string"
+          },
+          "anulable": {
+            "title": "Anulable",
+            "type": "boolean"
+          },
+          "anulada_por": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulada Por"
+          },
           "cliente_documento": {
             "title": "Cliente Documento",
             "type": "string"
@@ -546,6 +593,25 @@
             "title": "Numero",
             "type": "string"
           },
+          "referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referencia"
+          },
+          "tipo": {
+            "enum": [
+              "FACTURA",
+              "NOTA_CREDITO"
+            ],
+            "title": "Tipo",
+            "type": "string"
+          },
           "total": {
             "title": "Total",
             "type": "string"
@@ -565,13 +631,44 @@
           "vendedor",
           "estado",
           "error",
-          "total"
+          "total",
+          "tipo",
+          "ambiente",
+          "referencia",
+          "anulada_por",
+          "anulable"
         ],
         "title": "FacturaFilaSalida",
         "type": "object"
       },
       "FacturaSalida": {
         "properties": {
+          "ambiente": {
+            "description": "1 = producción, 2 = habilitación",
+            "enum": [
+              "1",
+              "2"
+            ],
+            "title": "Ambiente",
+            "type": "string"
+          },
+          "anulable": {
+            "description": "pista para la pantalla; la decisión es del servidor al anular",
+            "title": "Anulable",
+            "type": "boolean"
+          },
+          "anulada_por": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "de una factura: el número de la nota crédito aceptada que la anula",
+            "title": "Anulada Por"
+          },
           "cliente": {
             "$ref": "#/components/schemas/ClienteFactura"
           },
@@ -663,6 +760,26 @@
             "title": "Origen Tipo",
             "type": "string"
           },
+          "referencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "de una nota: el número de la factura que anula",
+            "title": "Referencia"
+          },
+          "tipo": {
+            "enum": [
+              "FACTURA",
+              "NOTA_CREDITO"
+            ],
+            "title": "Tipo",
+            "type": "string"
+          },
           "total": {
             "title": "Total",
             "type": "string"
@@ -670,6 +787,11 @@
         },
         "required": [
           "id",
+          "tipo",
+          "ambiente",
+          "referencia",
+          "anulada_por",
+          "anulable",
           "numero",
           "estado",
           "total",
@@ -2737,6 +2859,26 @@
           },
           {
             "in": "query",
+            "name": "tipo",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "FACTURA",
+                    "NOTA_CREDITO"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tipo"
+            }
+          },
+          {
+            "in": "query",
             "name": "limite",
             "required": false,
             "schema": {
@@ -2786,7 +2928,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Historial de facturas",
+        "summary": "Historial de facturas y notas crédito",
         "tags": [
           "administración"
         ]
@@ -2918,6 +3060,93 @@
           }
         ],
         "summary": "Estado de una factura",
+        "tags": [
+          "facturas"
+        ]
+      }
+    },
+    "/facturas/{factura_id}/anular": {
+      "post": {
+        "operationId": "anular_facturas__factura_id__anular_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "factura_id",
+            "required": true,
+            "schema": {
+              "title": "Factura Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnulacionEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacturaSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "no existe la factura"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "la factura no se puede anular o la clave se usó para otra operación"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "datos inválidos"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "falta configuración fiscal o numeración: no se emite"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Anular una factura con una nota crédito total (idempotente por `clave`). Solo administradores",
         "tags": [
           "facturas"
         ]

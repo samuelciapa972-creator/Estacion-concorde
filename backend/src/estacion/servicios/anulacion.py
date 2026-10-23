@@ -30,8 +30,27 @@ LARGO_MOTIVO = 500
 _ESTADOS_VIVOS = ("EN_PROCESO", "INCIERTO", "FACTURADO")
 
 
+def es_anulable(
+    *, tipo: str, estado: str, venta_manual_id: int | None, ambiente: str, ambiente_actual: str,
+    estado_nota: str | None,
+) -> bool:  # fmt: skip
+    """Las reglas de estado, tipo, origen, ambiente y nota viva de `solicitar`, sin bloquear nada. Sirve de pista
+    para la pantalla (no mira el total de la venta): quien decide es `solicitar`."""
+    return (
+        tipo == "FACTURA"
+        and estado == EstadoFactura.FACTURADO
+        and venta_manual_id is not None
+        and ambiente == ambiente_actual
+        and estado_nota not in _ESTADOS_VIVOS
+    )
+
+
 class FacturaNoAnulable(Exception):
     """La factura no existe o no se puede anular ahora (el mensaje no lleva datos personales)."""
+
+
+class FacturaNoEncontrada(FacturaNoAnulable):
+    """No hay ninguna factura con ese id."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +98,11 @@ class ServicioAnulacion:
         self._entorno = os.environ if entorno is None else entorno
         self._reloj = reloj
 
+    @property
+    def ambiente_actual(self) -> str:
+        """El ambiente de la DIAN con el que está configurado el sistema ('1' producción, '2' habilitación)."""
+        return self._entorno.get("DIAN_AMBIENTE", "").strip()
+
     def solicitar(self, conn: Conexion, *, clave: str, factura_id: int, usuario_id: int, motivo: str) -> NotaRegistrada:
         """Numera la nota crédito que anula `factura_id`, guarda su XML sin firmar y encola el envío.
         Idempotente por `clave`.
@@ -99,7 +123,7 @@ class ServicioAnulacion:
                 (factura_id,),
             ).fetchone()
             if f is None:
-                raise FacturaNoAnulable("la factura no existe")
+                raise FacturaNoEncontrada("la factura no existe")
             (
                 tipo,
                 estado,
@@ -132,7 +156,7 @@ class ServicioAnulacion:
                 raise FacturaNoAnulable(
                     f"la factura {numero} es de un despacho de surtidor: solo se anulan ventas manuales"
                 )
-            if ambiente != self._entorno.get("DIAN_AMBIENTE", "").strip():
+            if ambiente != self.ambiente_actual:
                 raise FacturaNoAnulable(f"la factura {numero} se emitió en otro ambiente de la DIAN")
             nota = conn.execute(
                 "SELECT id, estado, prefijo, consecutivo FROM factura WHERE referencia_id = %s FOR UPDATE",

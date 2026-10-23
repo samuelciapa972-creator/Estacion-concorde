@@ -21,3 +21,13 @@ def test_valores_cerrados_salen_como_enum():
     assert s["FacturaSalida"]["properties"]["estado"]["enum"] == ["EN_PROCESO", "FACTURADO", "RECHAZADO", "INCIERTO"]
     # Dinero y galones salen como texto decimal, nunca como número
     assert s["PendienteSalida"]["properties"]["valor"]["type"] == "string"
+
+
+def test_anulacion_en_el_contrato():
+    s = esquema()
+    anular = s["paths"]["/facturas/{factura_id}/anular"]["post"]
+    assert set(anular["responses"]) >= {"202", "404", "409", "422", "503"}
+    f = s["components"]["schemas"]["FacturaSalida"]["properties"]
+    assert f["tipo"]["enum"] == ["FACTURA", "NOTA_CREDITO"] and f["ambiente"]["enum"] == ["1", "2"]
+    assert {"referencia", "anulada_por", "anulable"} <= set(f)
+    assert s["components"]["schemas"]["AnulacionEntrada"]["properties"]["motivo"]["maxLength"] == 500

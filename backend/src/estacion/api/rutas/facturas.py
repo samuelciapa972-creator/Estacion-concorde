@@ -12,28 +12,47 @@ from ...facturacion.modelos import EstadoEntrega, TipoTrabajo
 from ...facturacion.representacion import RepresentacionInvalida, generar_pdf, leer_xml, texto_validacion
 from ...servicios import clientes, entrega
 from ...servicios._bd import auditar, encolar, exigir_autocommit
+from ...servicios.anulacion import FacturaNoEncontrada, es_anulable
 from ...servicios.emision import Origen
 from ..dependencias import Conn, SesionActual, SesionAdmin
-from ..esquemas import ClienteFactura, EntregaSalida, Error, FacturaEntrada, FacturaSalida, TipoDocumento
+from ..esquemas import (
+    AnulacionEntrada,
+    ClienteFactura,
+    EntregaSalida,
+    Error,
+    FacturaEntrada,
+    FacturaSalida,
+    TipoDocumento,
+)
 
 router = APIRouter(prefix="/facturas", tags=["facturas"])
 
 
-def leer_factura(conn: Conn, factura_id: int) -> FacturaSalida | None:
+def leer_factura(conn: Conn, factura_id: int, ambiente_actual: str) -> FacturaSalida | None:
+    """La factura o nota con su estado de anulación. Una nota hereda el origen y el cliente de la factura que anula."""
     fila = conn.execute(
-        """SELECT id, numero, estado, total, cufe, fecha_emision, medio_pago, despacho_id, venta_manual_id,
-                  cliente_id, error
-           FROM factura WHERE id = %s""",
+        """SELECT f.id, f.numero, f.estado, f.total, f.cufe, f.fecha_emision, f.medio_pago,
+                  coalesce(f.despacho_id, r.despacho_id), coalesce(f.venta_manual_id, r.venta_manual_id),
+                  f.cliente_id, f.error, f.tipo, f.ambiente, f.venta_manual_id, r.numero, n.numero, n.estado
+           FROM factura f
+           LEFT JOIN factura r ON r.id = f.referencia_id  -- la factura que anula esta nota
+           LEFT JOIN factura n ON n.referencia_id = f.id  -- la nota de esta factura (única por factura)
+           WHERE f.id = %s""",
         (factura_id,),
     ).fetchone()
     if fila is None:
         return None
-    fid, numero, estado, total, cufe, fecha, medio, despacho_id, venta_id, cliente_id, error = fila
+    (fid, numero, estado, total, cufe, fecha, medio, despacho_id, venta_id, cliente_id, error, tipo, ambiente,
+     venta_propia, referencia, nota_numero, nota_estado) = fila  # fmt: skip
     cliente = clientes.obtener(conn, cliente_id)
     assert cliente is not None  # FK
     e = entrega.obtener(conn, fid)
     return FacturaSalida(
-        id=fid, numero=numero, estado=estado, total=total, cufe=cufe, fecha_emision=fecha, medio_pago=medio,
+        id=fid, tipo=tipo, ambiente=ambiente, referencia=referencia,
+        anulada_por=nota_numero if nota_estado == "FACTURADO" else None,
+        anulable=es_anulable(tipo=tipo, estado=estado, venta_manual_id=venta_propia, ambiente=ambiente,
+                             ambiente_actual=ambiente_actual, estado_nota=nota_estado),
+        numero=numero, estado=estado, total=total, cufe=cufe, fecha_emision=fecha, medio_pago=medio,
         origen_tipo="despacho" if despacho_id is not None else "venta_manual",
         origen_id=despacho_id if despacho_id is not None else venta_id,
         cliente=ClienteFactura(id=cliente.id, tipo_documento=cast(TipoDocumento, cliente.tipo_documento),
@@ -70,16 +89,43 @@ def emitir(datos: FacturaEntrada, request: Request, response: Response, conn: Co
     )
     if not registrada.nueva:
         response.status_code = status.HTTP_200_OK
-    factura = leer_factura(conn, registrada.id)
+    factura = leer_factura(conn, registrada.id, request.app.state.anulacion.ambiente_actual)
     assert factura is not None
     return factura.model_copy(update={"nueva": registrada.nueva})
+
+
+@router.post(
+    "/{factura_id}/anular",
+    response_model=FacturaSalida,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        404: {"model": Error, "description": "no existe la factura"},
+        409: {"model": Error, "description": "la factura no se puede anular o la clave se usó para otra operación"},
+        422: {"model": Error, "description": "datos inválidos"},
+        503: {"model": Error, "description": "falta configuración fiscal o numeración: no se emite"},
+    },
+    summary="Anular una factura con una nota crédito total (idempotente por `clave`). Solo administradores",
+)
+def anular(factura_id: int, datos: AnulacionEntrada, request: Request, conn: Conn, sesion: SesionAdmin):
+    # Como `emitir`, no espera a la DIAN: la nota queda EN_PROCESO y el worker la envía. El motivo no se repite
+    # en ningún mensaje de error: puede llevar datos personales.
+    servicio = request.app.state.anulacion
+    try:
+        registrada = servicio.solicitar(
+            conn, clave=datos.clave, factura_id=factura_id, usuario_id=sesion.usuario_id, motivo=datos.motivo
+        )
+    except FacturaNoEncontrada:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no existe esa factura") from None
+    nota = leer_factura(conn, registrada.id, servicio.ambiente_actual)
+    assert nota is not None
+    return nota.model_copy(update={"nueva": registrada.nueva})
 
 
 @router.get(
     "/{factura_id}", response_model=FacturaSalida, responses={404: {"model": Error}}, summary="Estado de una factura"
 )
-def consultar(factura_id: int, conn: Conn, _: SesionActual) -> FacturaSalida:
-    factura = leer_factura(conn, factura_id)
+def consultar(factura_id: int, request: Request, conn: Conn, _: SesionActual) -> FacturaSalida:
+    factura = leer_factura(conn, factura_id, request.app.state.anulacion.ambiente_actual)
     if factura is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no existe esa factura")
     return factura

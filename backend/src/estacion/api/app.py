@@ -19,6 +19,7 @@ from psycopg_pool import ConnectionPool, PoolTimeout
 
 from ..facturacion.documentos import ClienteInvalido
 from ..facturacion.xml_factura import FacturaNoSoportada, NumeracionInvalida
+from ..servicios.anulacion import FacturaNoAnulable, ServicioAnulacion
 from ..servicios.clientes import ClienteYaExiste
 from ..servicios.configuracion import ConfiguracionIncompleta
 from ..servicios.emision import ClaveReutilizada, ClienteNoDisponible, OrigenNoDisponible, ServicioEmision
@@ -40,6 +41,7 @@ log = logging.getLogger(__name__)
 ERRORES: dict[type[Exception], tuple[int, str]] = {
     OrigenNoDisponible: (status.HTTP_409_CONFLICT, ""),
     ClaveReutilizada: (status.HTTP_409_CONFLICT, ""),
+    FacturaNoAnulable: (status.HTTP_409_CONFLICT, ""),
     ClienteYaExiste: (status.HTTP_409_CONFLICT, ""),
     ClienteNoDisponible: (status.HTTP_422_UNPROCESSABLE_CONTENT, ""),
     VentaInvalida: (status.HTTP_422_UNPROCESSABLE_CONTENT, ""),
@@ -94,6 +96,7 @@ def crear_app(
     if aj.captcha is None:
         log.warning("registro público SIN captcha (ESTACION_CAPTCHA_PROVEEDOR vacío): solo para el banco de pruebas")
     app.state.emision = ServicioEmision(entorno=entorno_dian)
+    app.state.anulacion = ServicioAnulacion(entorno=entorno_dian)
     app.state.limite_login = LimitadorTasa(aj.login_por_minuto)
     app.state.limite_registro = LimitadorTasa(aj.registro_por_minuto)
 

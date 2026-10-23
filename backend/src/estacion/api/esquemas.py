@@ -170,6 +170,14 @@ class FacturaEntrada(Esquema):
     medio_pago: MedioPago
 
 
+class AnulacionEntrada(Esquema):
+    clave: str = Field(
+        pattern=r"^[A-Za-z0-9]{16,64}$",
+        description="generada UNA vez por intento de anulación; reintentar con la misma clave no duplica la nota",
+    )
+    motivo: str = Field(min_length=1, max_length=500, description="por qué se anula (sale en la nota crédito)")
+
+
 class ClienteFactura(BaseModel):
     id: int
     tipo_documento: TipoDocumento
@@ -186,6 +194,11 @@ class EntregaSalida(BaseModel):
 
 class FacturaSalida(BaseModel):
     id: int
+    tipo: Literal["FACTURA", "NOTA_CREDITO"]
+    ambiente: Literal["1", "2"] = Field(description="1 = producción, 2 = habilitación")
+    referencia: str | None = Field(description="de una nota: el número de la factura que anula")
+    anulada_por: str | None = Field(description="de una factura: el número de la nota crédito aceptada que la anula")
+    anulable: bool = Field(description="pista para la pantalla; la decisión es del servidor al anular")
     numero: str
     estado: EstadoFactura
     total: Decimal

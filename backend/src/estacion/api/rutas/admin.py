@@ -13,7 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from ...modelos import Rol
-from ...servicios import clientes, personal, vehiculos
+from ...servicios import clientes, consulta_facturas, personal, vehiculos
 from ...servicios.consulta_ventas import FiltroVentas, buscar_ventas, listar_usuarios
 from ...servicios.importacion_csv import (
     COLUMNAS_CLIENTES,
@@ -132,6 +132,11 @@ class FacturaFilaSalida(BaseModel):
     estado: str
     error: str | None
     total: Decimal
+    tipo: Literal["FACTURA", "NOTA_CREDITO"]
+    ambiente: Literal["1", "2"]
+    referencia: str | None
+    anulada_por: str | None
+    anulable: bool
 
 
 class FacturasPaginaSalida(BaseModel):
@@ -139,44 +144,24 @@ class FacturasPaginaSalida(BaseModel):
     total: int
 
 
-@router.get("/facturas", response_model=FacturasPaginaSalida, summary="Historial de facturas")
+@router.get("/facturas", response_model=FacturasPaginaSalida, summary="Historial de facturas y notas crédito")
 def listar_facturas(
+    request: Request,
     conn: Conn,
     _: SesionAdmin,
     desde: Annotated[datetime, Query(description="hora local, incluida")],
     hasta: Annotated[datetime, Query(description="hora local, excluida")],
     estado: Literal["EN_PROCESO", "FACTURADO", "RECHAZADO", "INCIERTO"] | None = None,
+    tipo: Literal["FACTURA", "NOTA_CREDITO"] | None = None,
     limite: Annotated[int, Query(ge=1, le=500)] = 100,
     desplazamiento: Annotated[int, Query(ge=0)] = 0,
 ) -> Any:
     exigir_rango(desde, hasta, hasta_incluido=False)
-    p = {"desde": desde, "hasta": hasta, "estado": estado}
-    base = """FROM factura f
-        JOIN cliente c ON c.id = f.cliente_id
-        JOIN usuario u ON u.id = f.usuario_id
-        WHERE f.fecha_emision >= %(desde)s AND f.fecha_emision < %(hasta)s
-          AND (%(estado)s::text IS NULL OR f.estado = %(estado)s)"""
-    total = (conn.execute("SELECT count(*) " + base, p).fetchone() or (0,))[0]
-    filas = conn.execute(
-        "SELECT f.id, f.numero, f.fecha_emision,"
-        " CASE WHEN c.tipo_documento IN ('NIT', 'NIT_EXTERIOR') THEN c.nombres"
-        " ELSE btrim(c.nombres || ' ' || c.apellidos) END,"
-        " c.tipo_documento, c.numero_documento, u.nombre, f.estado, f.error, f.total "
-        + base
-        + " ORDER BY f.fecha_emision DESC, f.id DESC LIMIT %(limite)s OFFSET %(desplazamiento)s",
-        {**p, "limite": limite, "desplazamiento": desplazamiento},
-    ).fetchall()
-    return {
-        "total": total,
-        "filas": [
-            {
-                "id": f[0], "numero": f[1], "fecha_emision": f[2], "cliente_nombre": f[3],
-                "cliente_tipo": f[4], "cliente_documento": f[5], "vendedor": f[6],
-                "estado": f[7], "error": f[8], "total": f[9],
-            }
-            for f in filas
-        ],
-    }  # fmt: skip
+    filas, total = consulta_facturas.listar_facturas(
+        conn, desde, hasta, estado=estado, tipo=tipo, ambiente_actual=request.app.state.anulacion.ambiente_actual,
+        limite=limite, desplazamiento=desplazamiento,
+    )  # fmt: skip
+    return {"total": total, "filas": [asdict(f) for f in filas]}
 
 
 # ------------------------------------------------------------------------------------------ clientes
