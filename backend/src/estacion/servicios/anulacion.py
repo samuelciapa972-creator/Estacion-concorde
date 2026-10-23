@@ -94,13 +94,25 @@ class ServicioAnulacion:
             # 1. El bloqueo de la factura serializa a dos usuarios (o dos clics) sobre la misma anulación.
             f = conn.execute(
                 """SELECT tipo, estado, venta_manual_id, cliente_id, forma_pago, medio_pago, ambiente, numero, cufe,
-                          fecha_emision
+                          fecha_emision, total
                    FROM factura WHERE id = %s FOR UPDATE""",
                 (factura_id,),
             ).fetchone()
             if f is None:
                 raise FacturaNoAnulable("la factura no existe")
-            tipo, estado, venta_manual_id, cliente_id, forma_pago, medio_pago, ambiente, numero, cufe, fecha_f = f
+            (
+                tipo,
+                estado,
+                venta_manual_id,
+                cliente_id,
+                forma_pago,
+                medio_pago,
+                ambiente,
+                numero,
+                cufe,
+                fecha_f,
+                total_f,
+            ) = f
 
             # 2. ¿Esta clave ya tiene nota? (doble clic, reintento del cliente tras un corte)
             previa = conn.execute(
@@ -145,6 +157,11 @@ class ServicioAnulacion:
             if nota is not None:
                 nota_id: int | None = nota[0]
                 prefijo, consecutivo = nota[2], nota[3]
+                if prefijo != PREFIJO_NOTA.get(config.software.ambiente):  # misma vigilancia que al numerar
+                    raise ConfiguracionIncompleta(
+                        f"la nota a reenviar tiene el prefijo {prefijo}, y en el ambiente "
+                        f"{config.software.ambiente} debe ser {PREFIJO_NOTA.get(config.software.ambiente)}"
+                    )
             else:
                 nota_id = None
                 prefijo, consecutivo = asignar_consecutivo_nota(conn, estacion[0], config.software.ambiente)
@@ -159,6 +176,8 @@ class ServicioAnulacion:
                 medio_pago=medio_pago,
                 fecha_emision=fecha,
             )
+            if solicitud.total != total_f:  # anulación TOTAL: la nota vale lo mismo que la factura
+                raise FacturaNoAnulable(f"el valor de la venta cambió desde que se facturó {numero}")
             xml = construir_nota_credito(
                 solicitud,
                 prefijo=prefijo,
@@ -179,7 +198,7 @@ class ServicioAnulacion:
                        VALUES (%s, 'NOTA_CREDITO', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                        RETURNING id""",
                     (clave, factura_id, motivo, cliente_id, usuario_id, prefijo, consecutivo, forma_pago,
-                     medio_pago, solicitud.total, fecha, xml.cufe, xml_texto, config.software.ambiente),
+                     medio_pago, total_f, fecha, xml.cufe, xml_texto, config.software.ambiente),
                 ).fetchone()[0]  # type: ignore[index]  # fmt: skip
                 accion = "ANULACION_SOLICITADA"
             else:
@@ -190,7 +209,7 @@ class ServicioAnulacion:
                               respuesta_dian = NULL, application_response = NULL, dian_track_id = NULL,
                               error = NULL, actualizada_en = now()
                        WHERE id = %s""",
-                    (clave, motivo, cliente_id, usuario_id, forma_pago, medio_pago, solicitud.total, fecha,
+                    (clave, motivo, cliente_id, usuario_id, forma_pago, medio_pago, total_f, fecha,
                      xml.cufe, xml_texto, config.software.ambiente, nota_id),
                 )  # fmt: skip
                 accion = "NOTA_REENVIADA"

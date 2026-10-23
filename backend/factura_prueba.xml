@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+         xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+         xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
+         xmlns:sts="dian:gov:co:facturaelectronica:Structures-2"
+         xmlns:xades="http://uri.etsi.org/01903/v1.3.2#"
+         xmlns:xades141="http://uri.etsi.org/01903/v1.4.1#"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    
+    <ext:UBLExtensions>
+        <ext:UBLExtension>
+            <ext:ExtensionContent>
+                <sts:DianExtensions>
+                    <sts:InvoiceControl>
+                        <sts:InvoiceAuthorization></sts:InvoiceAuthorization>
+                        <sts:AuthorizationPeriod>
+                            <cbc:StartDate></cbc:StartDate>
+                            <cbc:EndDate></cbc:EndDate>
+                        </sts:AuthorizationPeriod>
+                        Para construir el archivo **`templates/factura.xml`**, trabajaremos sobre una plantilla estándar en formato **UBL 2.1** (Jinja2) personalizada con los requerimientos específicos de la DIAN para estaciones de servicio (EDS).
+
+---
+
+### **1. ¿Qué debe hacer este archivo?**
+
+1. **Definir la estructura UBL 2.1 estándar de la DIAN**: Cumplir con los espacios de nombres (`xmlns`), etiquetas y nodos fiscales obligatorios (`<Invoice>`, `<AccountingSupplierParty>`, `<AccountingCustomerParty>`, etc.).
+2. **Inyectar variables dinámicas con Jinja2**: Permitir que el backend complete datos dinámicos como:
+   * Datos de la factura: Número de factura, prefijo, fecha, hora, CUFE, clave técnica.
+   * Datos del cliente/adquirente (o consumidor final POS `222222222222`).
+   * Desglose de ítems: Galones vendidas, tipo de combustible (Corriente, Extra, ACPM), precio unitario por galón y totales.
+   * Impuestos específicos de combustible: Impuesto Nacional al Consumo/Combustibles (INC) y Sobretasa a la Gasolina.
+3. **Reservar el espacio para la firma digital**: Incluir el nodo `<ext:UBLExtensions>` donde `signer.py` insertará la firma **XAdES-EPES** en el estándar XML.
+
+---
+
+### **2. Estructura y Código para `templates/factura.xml`**
+
+Copia y guarda este código dentro de tu archivo **`backend/src/Dian/templates/factura.xml`**:
+
+```xml
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ds="[http://www.w3.org/2000/09/xmldsig#](http://www.w3.org/2000/09/xmldsig#)" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns:sts="dian:gov:co:facturaelectronica:Structures-2" xmlns:xades="[http://uri.etsi.org/01903/v1.3.2#](http://uri.etsi.org/01903/v1.3.2#)" xmlns:xsi="[http://www.w3.org/2001/XMLSchema-instance](http://www.w3.org/2001/XMLSchema-instance)">
+         
+    <ext:UBLExtensions>
+        <!-- Extensión para Firma Digital XAdES-EPES -->
+        <ext:UBLExtension>
+            <ext:ExtensionContent/>
+        </ext:UBLExtension>
+    </ext:UBLExtensions>
+
+    <cbc:UBLVersionID>UBL 2.1</cbc:UBLVersionID>
+    <cbc:CustomizationID>10</cbc:CustomizationID>
+    <cbc:ProfileID>DIAN 2.1: Factura Electrónica de Venta</cbc:ProfileID>
+    <cbc:ProfileExecutionID>2</cbc:ProfileExecutionID> <!-- 1: Producción, 2: Pruebas -->
+    <cbc:ID>SETP990000001</cbc:ID>
+    <cbc:UUID schemeID="2" schemeName="CUFE-SHA384">353fa512533a0b2798eb98f6c1b9dd43070352f84df7e7038a9ecd14bc58c8f423e2e95a3a57d5dd9da2e1ccb0e286bf</cbc:UUID>
+    <cbc:IssueDate>2026-10-05</cbc:IssueDate>
+    <cbc:IssueTime>14:30:00-05:00</cbc:IssueTime>
+    <cbc:InvoiceTypeCode>01</cbc:InvoiceTypeCode>
+    <cbc:DocumentCurrencyCode>COP</cbc:DocumentCurrencyCode>
+    <cbc:LineCountNumeric>1</cbc:LineCountNumeric>
+
+    <!-- Datos del Emisor (EDS Concorde) -->
+    <cac:AccountingSupplierParty>
+        <cbc:AdditionalAccountID>1</cbc:AdditionalAccountID> <!-- 1: Persona Jurídica -->
+        <cac:Party>
+            <cac:PartyName>
+                <cbc:Name>CENTRO ESPECIALIZADO DE MANTENIMIENTO Y ALISTAMIENTO CONCORDE S.A.S</cbc:Name>
+            </cac:PartyName>
+            <cac:PhysicalLocation>
+                <cac:Address>
+                    <cbc:ID>15001</cbc:ID>
+                    <cbc:CityName>Tunja</cbc:CityName>
+                    <cbc:CountrySubentity>Boyacá</cbc:CountrySubentity>
+                    <cac:AddressLine>
+                        <cbc:Line>AUTOPISANTA SUR KM 2</cbc:Line>
+                    </cac:AddressLine>
+                    <cac:Country>
+                        <cbc:IdentificationCode>CO</cbc:IdentificationCode>
+                    </cac:Country>
+                </cac:Address>
+            </cac:PhysicalLocation>
+            <cac:PartyTaxScheme>
+                <cbc:RegistrationName>CENTRO ESPECIALIZADO DE MANTENIMIENTO Y ALISTAMIENTO CONCORDE S.A.S</cbc:RegistrationName>
+                <cbc:CompanyID schemeID="1" schemeName="31">900000000</cbc:CompanyID>
+                <cbc:TaxLevelCode>R-99-PN</cbc:TaxLevelCode>
+                <cac:TaxScheme>
+                    <cbc:ID>01</cbc:ID>
+                    <cbc:Name>IVA</cbc:Name>
+                </cac:TaxScheme>
+            </cac:PartyTaxScheme>
+        </cac:Party>
+    </cac:AccountingSupplierParty>
+
+    <!-- Datos del Cliente / Adquirente -->
+    <cac:AccountingCustomerParty>
+        <cbc:AdditionalAccountID>2</cbc:AdditionalAccountID>
+        <cac:Party>
+            <cac:PartyName>
+                <cbc:Name>CONSUMIDOR FINAL</cbc:Name>
+            </cac:PartyName>
+            <cac:PartyTaxScheme>
+                <cbc:RegistrationName>CONSUMIDOR FINAL</cbc:RegistrationName>
+                <cbc:CompanyID schemeName="13">222222222222</cbc:CompanyID>
+                <cbc:TaxLevelCode>R-99-PN</cbc:TaxLevelCode>
+                <cac:TaxScheme>
+                    <cbc:ID>01</cbc:ID>
+                    <cbc:Name>IVA</cbc:Name>
+                </cac:TaxScheme>
+            </cac:PartyTaxScheme>
+        </cac:Party>
+    </cac:AccountingCustomerParty>
+
+    <!-- Forma y Medio de Pago -->
+    <cac:PaymentMeans>
+        <cbc:ID>1</cbc:ID>
+        <cbc:PaymentMeansCode>10</cbc:PaymentMeansCode> <!-- 10: Efectivo, 48: Tarjeta -->
+        <cbc:PaymentDueDate>2026-10-05</cbc:PaymentDueDate>
+    </cac:PaymentMeans>
+
+    <!-- Impuestos Totales de la Factura -->
+    <cac:TaxTotal>
+        <cbc:TaxAmount currencyID="COP">10000.0</cbc:TaxAmount>
+        
+        <cac:TaxSubtotal>
+            <cbc:TaxableAmount currencyID="COP">40000.0</cbc:TaxableAmount>
+            <cbc:TaxAmount currencyID="COP">3500.0</cbc:TaxAmount>
+            <cac:TaxScheme>
+                <cbc:ID>04</cbc:ID> <!-- 01: IVA, 04: INC, 03: Sobretasa -->
+                <cbc:Name>INC</cbc:Name>
+            </cac:TaxScheme>
+        </cac:TaxSubtotal>
+        
+        <cac:TaxSubtotal>
+            <cbc:TaxableAmount currencyID="COP">40000.0</cbc:TaxableAmount>
+            <cbc:TaxAmount currencyID="COP">6500.0</cbc:TaxAmount>
+            <cac:TaxScheme>
+                <cbc:ID>03</cbc:ID> <!-- 01: IVA, 04: INC, 03: Sobretasa -->
+                <cbc:Name>Sobretasa</cbc:Name>
+            </cac:TaxScheme>
+        </cac:TaxSubtotal>
+        
+    </cac:TaxTotal>
+
+    <!-- Totales Generales -->
+    <cac:LegalMonetaryTotal>
+        <cbc:LineExtensionAmount currencyID="COP">40000.0</cbc:LineExtensionAmount>
+        <cbc:TaxExclusiveAmount currencyID="COP">40000.0</cbc:TaxExclusiveAmount>
+        <cbc:TaxInclusiveAmount currencyID="COP">50000.0</cbc:TaxInclusiveAmount>
+        <cbc:PayableAmount currencyID="COP">50000.0</cbc:PayableAmount>
+    </cac:LegalMonetaryTotal>
+
+    <!-- Líneas de Detalle (Combustibles Despachados) -->
+    
+    <cac:InvoiceLine>
+        <cbc:ID>1</cbc:ID>
+        <cbc:InvoicedQuantity unitCode="GLL">3.448</cbc:InvoicedQuantity> <!-- GLL: Galones -->
+        <cbc:LineExtensionAmount currencyID="COP">50000.0</cbc:LineExtensionAmount>
+        <cac:Item>
+            <cbc:Description>GASOLINA CORRIENTE</cbc:Description> <!-- Ej: Gasolina Corriente / ACPM -->
+            <cac:StandardItemIdentification>
+                <cbc:ID schemeID="999">COR01</cbc:ID>
+            </cac:StandardItemIdentification>
+        </cac:Item>
+        <cac:Price>
+            <cbc:PriceAmount currencyID="COP">14500.0</cbc:PriceAmount>
+            <cbc:BaseQuantity unitCode="GLL">1.000</cbc:BaseQuantity>
+        </cac:Price>
+    </cac:InvoiceLine>
+    
+
+</Invoice>

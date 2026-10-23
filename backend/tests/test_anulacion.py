@@ -274,3 +274,27 @@ def test_la_nota_usa_la_hora_de_la_nota_y_referencia_la_de_la_factura(escenario,
 
 def test_prefijos_por_ambiente():
     assert PREFIJO_NOTA == {"1": "NCE", "2": "NCP"}
+
+
+def test_venta_modificada_tras_facturar_no_se_anula(escenario, conn, recursos):
+    factura_id = facturar(escenario, conn, recursos)
+    venta = escenario.datos.uno("SELECT venta_manual_id FROM factura WHERE id = %s", (factura_id,))
+    escenario.datos.conn.execute("UPDATE venta_manual SET valor = valor + 1000 WHERE id = %s", (venta,))
+    with pytest.raises(FacturaNoAnulable, match="cambió"):
+        anular(escenario, conn, factura_id)
+    assert contar(escenario, "factura", "tipo = 'NOTA_CREDITO'") == 0
+    assert siguiente_nota(escenario) is None  # el rollback deshizo también la creación de la serie
+
+
+def test_reenvio_con_prefijo_incorrecto_falla(escenario, conn, recursos):
+    factura_id = facturar(escenario, conn, recursos)
+    nota = anular(escenario, conn, factura_id)
+    escenario.datos.conn.execute(
+        "UPDATE factura SET estado = 'RECHAZADO', error = 'x', prefijo = 'NCE' WHERE id = %s", (nota.id,)
+    )
+    escenario.datos.conn.execute(
+        "UPDATE outbox SET estado = 'HECHO', terminado_en = now() WHERE factura_id = %s", (nota.id,)
+    )
+    with pytest.raises(ConfiguracionIncompleta, match="prefijo NCE"):
+        anular(escenario, conn, factura_id)
+    assert escenario.datos.uno("SELECT estado FROM factura WHERE id = %s", (nota.id,)) == "RECHAZADO"
