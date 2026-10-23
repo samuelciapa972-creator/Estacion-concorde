@@ -1,10 +1,12 @@
-import { useState } from 'react';
-import { api } from '../services/api';
+import { useRef, useState } from 'react';
+import { api, usuarioActual } from '../services/api';
 import { guardarArchivo } from '../lib/descarga';
 import { fechaHora, pesos, rangoHastaHoy } from '../lib/formato';
+import { etiquetaDocumento, puedeAnular } from '../lib/anulacion';
 import { useCarga } from '../lib/useCarga';
-import { Boton, Celda, Encabezado, Etiqueta, ErrorApi, Paginador, Segmentado, Tabla, Vacio, Cargando } from '../components/ui';
+import { Boton, Celda, Encabezado, Etiqueta, ErrorApi, Mensaje, Paginador, Segmentado, Tabla, Vacio, Cargando } from '../components/ui';
 import { COLOR, estilos } from '../components/estilos';
+import DialogoAnular from '../components/DialogoAnular';
 
 const LIMITE = 100;
 
@@ -20,7 +22,11 @@ export default function Facturacion() {
   const [estado, setEstado] = useState(null);
   const [desde, setDesde] = useState(0);
   const [descarga, setDescarga] = useState({ id: null, error: null });
-  const { datos, error, cargando } = useCarga(
+  const [aAnular, setAAnular] = useState(null);
+  const [aviso, setAviso] = useState(null);
+  const avisoRef = useRef(null);
+  const usuario = usuarioActual();
+  const { datos, error, cargando, recargar } = useCarga(
     () => api.facturas({ ...rangoHastaHoy(periodo), estado, limite: LIMITE, desplazamiento: desde }),
     [periodo, estado, desde],
   );
@@ -34,6 +40,14 @@ export default function Facturacion() {
     } catch (err) {
       setDescarga({ id: null, error: err });
     }
+  };
+
+  // Tras anular, la fila pierde su botón: el foco pasa al aviso para no perderse.
+  const anulada = async (nota) => {
+    setAAnular(null);
+    setAviso(`Factura anulada con la nota crédito ${nota.numero}.`);
+    await recargar();
+    avisoRef.current?.focus();
   };
 
   return (
@@ -61,13 +75,18 @@ export default function Facturacion() {
       </div>
 
       <ErrorApi error={error || descarga.error} />
+      {aviso && (
+        <div ref={avisoRef} tabIndex={-1} style={{ outline: 'none' }}>
+          <Mensaje tipo="info">{aviso}</Mensaje>
+        </div>
+      )}
 
       {cargando && !datos ? (
         <Cargando />
       ) : facturas.length === 0 ? (
         <Vacio>Sin registros de facturación</Vacio>
       ) : (
-        <Tabla columnas={['N° factura', 'Fecha', 'Cliente', 'Vendedor', 'Estado', { texto: 'Total', alinear: 'right' }, { texto: 'PDF', alinear: 'center' }]}>
+        <Tabla columnas={['N° factura', 'Fecha', 'Cliente', 'Vendedor', 'Estado', { texto: 'Total', alinear: 'right' }, { texto: 'Acciones', alinear: 'center' }]}>
           {facturas.map((f) => (
             <tr key={f.id} style={estilos.fila}>
               <Celda style={{ fontWeight: '600' }}>{f.numero}</Celda>
@@ -81,13 +100,19 @@ export default function Facturacion() {
               <Celda suave>{f.vendedor}</Celda>
               <Celda>
                 <Etiqueta color={ESTADOS[f.estado]?.color}>{ESTADOS[f.estado]?.texto || f.estado}</Etiqueta>
+                {etiquetaDocumento(f) && <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-secondary)' }}>{etiquetaDocumento(f)}</span>}
                 {f.error && <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-secondary)', maxWidth: '260px' }}>{f.error}</span>}
               </Celda>
-              <Celda alinear="right" fuerte>{pesos(f.total)}</Celda>
+              <Celda alinear="right" fuerte>{f.tipo === 'NOTA_CREDITO' ? '−' : ''}{pesos(f.total)}</Celda>
               <Celda alinear="center">
                 {f.estado === 'FACTURADO' && (
                   <Boton variante="chico" onClick={() => pdf(f)} disabled={descarga.id === f.id} aria-label={`Descargar PDF de ${f.numero}`}>
                     {descarga.id === f.id ? '...' : 'PDF'}
+                  </Boton>
+                )}
+                {puedeAnular(f, usuario) && (
+                  <Boton variante="chico" onClick={() => setAAnular(f)} aria-label={`Anular la factura ${f.numero}`} style={{ marginLeft: '6px' }}>
+                    Anular
                   </Boton>
                 )}
               </Celda>
@@ -95,6 +120,7 @@ export default function Facturacion() {
           ))}
         </Tabla>
       )}
+      {aAnular && <DialogoAnular factura={aAnular} onCerrar={() => setAAnular(null)} onAnulada={anulada} />}
       {datos && <Paginador desde={desde} limite={LIMITE} total={datos.total} onCambio={setDesde} />}
     </div>
   );

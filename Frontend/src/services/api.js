@@ -137,6 +137,7 @@ export const api = {
   emitir: (f) => json("POST", "/facturas", f),
   factura: (id) => json("GET", `/facturas/${id}`),
   facturaPdf: (id) => archivo(`/facturas/${id}/pdf`),
+  anular: (id, { clave, motivo }) => json("POST", `/facturas/${id}/anular`, { clave, motivo }),
 
   // público (registro por QR)
   configuracionPublica: () => json("GET", "/publico/configuracion"),
