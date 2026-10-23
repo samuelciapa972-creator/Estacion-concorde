@@ -352,3 +352,45 @@ def test_correo_emisor_invalido_o_sin_confirmar_no_cambia_nada(escenario):
         escenario.datos.uno("SELECT email FROM estacion WHERE id = %s", (escenario.estacion,)) == "estacion@example.com"
     )
     assert escenario.datos.uno("SELECT count(*) FROM auditoria WHERE accion = 'EMISOR_CORREO_CAMBIADO'") == 0
+
+
+def test_guardar_clave_tecnica_escribe_el_archivo_y_no_la_imprime(escenario, tmp_path, capsys):
+    e = entorno_produccion(escenario, tmp_path, DIAN_CLAVE_TECNICA="")  # no hace falta tenerla en el .env
+    ruta = tmp_path / "clave.env"
+    dian = dian_produccion()
+    assert habilitacion.main(["guardar-clave-tecnica", "--prefijo", "EDSC", "--archivo", str(ruta)], entorno=e,
+                             cliente_dian=dian) == 0  # fmt: skip
+    assert ruta.read_text() == f"DIAN_CLAVE_TECNICA={CLAVE_TECNICA}\n"
+    assert (ruta.stat().st_mode & 0o777) == 0o600
+    captura = capsys.readouterr()
+    assert CLAVE_TECNICA not in captura.out + captura.err and str(ruta) in captura.out
+    assert dian.llamadas == [("900123456", ENTORNO_DIAN["DIAN_SOFTWARE_ID"])]
+
+
+def test_guardar_clave_tecnica_se_niega_si_el_archivo_existe(escenario, tmp_path, capsys):
+    ruta = tmp_path / "clave.env"
+    ruta.write_text("lo que había")
+    e = entorno_produccion(escenario, tmp_path)
+    assert habilitacion.main(["guardar-clave-tecnica", "--prefijo", "EDSC", "--archivo", str(ruta)], entorno=e,
+                             cliente_dian=dian_produccion()) == 1  # fmt: skip
+    assert ruta.read_text() == "lo que había"
+    captura = capsys.readouterr()
+    assert CLAVE_TECNICA not in captura.out + captura.err
+
+
+def test_guardar_clave_tecnica_sin_clave_o_sin_prefijo_no_escribe(escenario, tmp_path):
+    e = entorno_produccion(escenario, tmp_path)
+    vacia = tmp_path / "a.env"
+    assert habilitacion.main(["guardar-clave-tecnica", "--prefijo", "EDSC", "--archivo", str(vacia)], entorno=e,
+                             cliente_dian=dian_produccion(clave_tecnica="")) == 1  # fmt: skip
+    otro = tmp_path / "b.env"
+    assert habilitacion.main(["guardar-clave-tecnica", "--prefijo", "XXXX", "--archivo", str(otro)], entorno=e,
+                             cliente_dian=dian_produccion()) == 1  # fmt: skip
+    assert not vacia.exists() and not otro.exists()
+
+
+def test_guardar_clave_tecnica_exige_ambiente_1(escenario, tmp_path):
+    ruta = tmp_path / "clave.env"
+    assert habilitacion.main(["guardar-clave-tecnica", "--prefijo", "EDSC", "--archivo", str(ruta)],
+                             entorno=entorno(escenario), cliente_dian=dian_produccion()) == 2  # fmt: skip
+    assert not ruta.exists()

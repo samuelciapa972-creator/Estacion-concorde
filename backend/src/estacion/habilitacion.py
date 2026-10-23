@@ -10,6 +10,8 @@ Orden recomendado (todo contra el ambiente de HABILITACIÓN):
 Salida a producción (con DIAN_AMBIENTE=1; ver docs):
     verificar-produccion    lista con ✔/✘ lo que falta (no envía documentos); sale 0 solo si todo está ✔.
     configurar-produccion --prefijo EDSC   consulta el rango en la DIAN y lo activa como numeración de producción.
+    guardar-clave-tecnica --prefijo EDSC --archivo RUTA   escribe DIAN_CLAVE_TECNICA=<clave de la DIAN> en un
+                            archivo NUEVO (0600), sin imprimirla; se copia la línea al .env y se borra el archivo.
     correo-emisor [--nuevo CORREO]         muestra o cambia el correo del emisor.
 Lee DATABASE_URL, DIAN_* y el certificado del entorno. Nunca imprime el PIN, la clave técnica ni la del certificado.
 """
@@ -49,7 +51,7 @@ VOLUMEN, PPU, VALOR = Decimal("1.861"), Decimal("15990"), Decimal("29757")
 DOCUMENTO_PRUEBA = "1000000001"
 # Mismo patrón que el CHECK de estacion.email (migración 0002).
 PATRON_CORREO = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]{2,}")
-ACCIONES_DE_PRODUCCION = {"configurar-produccion", "verificar-produccion"}
+ACCIONES_DE_PRODUCCION = {"configurar-produccion", "verificar-produccion", "guardar-clave-tecnica"}
 # Trabajos que hablan con la DIAN: los de habilitación (ambiente 2) no pueden quedar en la cola al pasar a producción.
 SQL_PENDIENTES_DE_HABILITACION = """SELECT count(*) FROM outbox o JOIN factura f ON f.id = o.factura_id
     WHERE o.estado = 'PENDIENTE' AND o.tipo IN ('ENVIAR_DIAN', 'CONSULTAR_DIAN') AND f.ambiente = '2'"""
@@ -82,6 +84,9 @@ def main(
     sub.add_parser("verificar-produccion", help="revisa si todo está listo para producción (no envía documentos)")
     prod = sub.add_parser("configurar-produccion", help="activa la numeración de producción que la DIAN tiene asociada")
     prod.add_argument("--prefijo", required=True, help="prefijo del rango de producción, p. ej. EDSC")
+    clave = sub.add_parser("guardar-clave-tecnica", help="guarda la clave técnica del rango, sin imprimirla")
+    clave.add_argument("--prefijo", required=True, help="prefijo del rango de producción, p. ej. EDSC")
+    clave.add_argument("--archivo", required=True, help="archivo NUEVO donde escribirla (permisos 0600)")
     correo = sub.add_parser("correo-emisor", help="muestra o cambia el correo del emisor")
     correo.add_argument("--nuevo", help="el correo nuevo (pide confirmación)")
     args = ap.parse_args(argv)
@@ -114,6 +119,8 @@ def main(
             return _configurar_produccion(
                 conn, entorno, estacion[0], estacion[1], args.prefijo, confirmar, cliente_dian
             )
+        if args.accion == "guardar-clave-tecnica":
+            return _guardar_clave_tecnica(entorno, estacion[1], args.prefijo, args.archivo, cliente_dian)
         if args.accion == "correo-emisor":
             return _correo_emisor(conn, estacion[0], estacion[2], args.nuevo, confirmar)
         if args.accion == "enviar":
@@ -276,6 +283,39 @@ def _configurar_produccion(
             conn.execute("UPDATE numeracion SET activa = TRUE WHERE id = %s", (fila[0],))
         auditar(conn, "NUMERACION_PRODUCCION_ACTIVADA", "estacion", estacion_id, detalle={"prefijo": prefijo})
     print(f"Numeración de producción {prefijo} {rango.desde}-{rango.hasta} activa.")
+    return 0
+
+
+def _guardar_clave_tecnica(
+    entorno: Mapping[str, str], nit: str, prefijo: str, archivo: str, cliente_dian: ClienteDian | None
+) -> int:
+    """Escribe `DIAN_CLAVE_TECNICA=<clave>` (la que la DIAN tiene para el rango) en un archivo NUEVO con permisos 0600.
+    La clave nunca se imprime ni se registra: es secreta."""
+    if os.path.lexists(archivo):
+        _err("el archivo ya existe: no se sobrescribe nada (indique uno nuevo)")
+        return 1
+    r, motivo = _consultar_rangos(entorno, nit, cliente_dian)
+    if r is None:
+        _err(motivo)
+        return 1
+    rango = next((x for x in r.rangos if x.prefijo == prefijo), None)
+    if rango is None:
+        _err(f"la DIAN no tiene un rango de producción con el prefijo {prefijo}")
+        return 1
+    if not rango.clave_tecnica:
+        _err(f"la DIAN no devolvió clave técnica para el rango {prefijo}: no se escribió nada")
+        return 1
+    try:
+        fd = os.open(archivo, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)  # EXCL: ni sigue ni pisa un archivo previo
+    except OSError as e:
+        _err(f"no se pudo crear el archivo ({e.strerror})")
+        return 1
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(f"DIAN_CLAVE_TECNICA={rango.clave_tecnica}\n")
+    print(
+        f"Clave técnica del rango {prefijo} escrita en {archivo} (no se muestra). "
+        "Copie esa línea al .env y después BORRE el archivo."
+    )
     return 0
 
 

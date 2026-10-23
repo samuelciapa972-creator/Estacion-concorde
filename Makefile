@@ -11,9 +11,10 @@
 #   make simulador     surtidor simulado: un despacho cada 20 s en la base de desarrollo (Ctrl+C para parar)
 #   make api           API en http://127.0.0.1:8000 (documentación en /docs); necesita JWT_SECRETO
 #   make worker        procesa la cola de envíos con el proveedor SIMULADO (no envía nada a la DIAN)
-#   make worker-dian   procesa la cola enviando al ambiente de HABILITACIÓN de la DIAN (certificado real en .env)
+#   make worker-dian   procesa la cola enviando a la DIAN según DIAN_AMBIENTE (2 habilitación, 1 producción; certificado real en .env)
 #   make habilitacion-probar   prueba certificado, firma y conexión con la DIAN (no envía documentos)
 #   make verificar-produccion  revisa si todo está listo para producción (DIAN_AMBIENTE=1; no envía documentos)
+#   make guardar-clave-tecnica PREFIJO=EDSC ARCHIVO=ruta   escribe DIAN_CLAVE_TECNICA en un archivo NUEVO (0600), sin imprimirla
 #   make configurar-produccion PREFIJO=EDSC   activa la numeración de producción que la DIAN tiene asociada
 #   make mail          buzón de PRUEBA (Mailpit): recibe los correos de las facturas en http://localhost:8025
 #   make correo-prueba DESTINO=x@correo.com   envía un correo de prueba (sin factura) con la configuración del .env
@@ -44,7 +45,7 @@ DATABASE_URL ?= postgresql://estacion:estacion@localhost:5432/estacion
 export DATABASE_URL
 
 .PHONY: install up migrate down db-reset test test-back test-rapido test-web lint lint-back lint-web format \
-        simulador worker worker-dian habilitacion-probar verificar-produccion configurar-produccion mail correo-prueba certificado api web web-build tipos stack stack-simulador stack-logs stack-down stack-usuario ca
+        simulador worker worker-dian habilitacion-probar verificar-produccion guardar-clave-tecnica configurar-produccion mail correo-prueba certificado api web web-build tipos stack stack-simulador stack-logs stack-down stack-usuario ca
 
 install:
 	cd $(BACK) && uv venv --python 3.12 $(VENV) && uv pip install --python $(PY) -e ".[dev]"
@@ -110,6 +111,10 @@ habilitacion-probar:
 # Salida a producción (DIAN_AMBIENTE=1 en el .env): ver docs/salida-a-produccion.md
 verificar-produccion:
 	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.habilitacion verificar-produccion
+
+guardar-clave-tecnica:
+	@test -n "$(PREFIJO)" && test -n "$(ARCHIVO)" || { echo "uso: make guardar-clave-tecnica PREFIJO=EDSC ARCHIVO=ruta/nuevo.env"; exit 2; }
+	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.habilitacion guardar-clave-tecnica --prefijo "$(PREFIJO)" --archivo "$(abspath $(ARCHIVO))"
 
 configurar-produccion:
 	@test -n "$(PREFIJO)" || { echo "uso: make configurar-produccion PREFIJO=EDSC"; exit 2; }
