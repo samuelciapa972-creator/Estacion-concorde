@@ -8,10 +8,12 @@
 
 Ya hecho:
 
-- 2026-10-13: el set de pruebas de habilitación pasó. El software "EDS System Facturation Concorde" está en producción en el catálogo.
-- 2026-10-21: formulario 1302 firmado. Resolución 1876 n.º 18764117468740: prefijo **EDSC**, del 1 al 1.000.000,
+- 2026-10-13: el set de pruebas de habilitación pasó.
+- 2026-10-14: solicitud de numeración EDSC en MUISCA (borrador).
+- 2026-10-21: formulario 1302 firmado y resolución 1876 n.º 18764117468740: prefijo **EDSC**, del 1 al 1.000.000,
   factura electrónica de venta, vigencia de 24 meses (hasta 2028-10-21 aprox.).
-- 2026-10-23: EDSC asociado a nuestro software en catalogo-vpfe (producción). La asociación expira el 2028-10-21.
+- 2026-10-21: el software "EDS System Facturation Concorde" figura en producción en catalogo-vpfe (lo vio el usuario).
+- 2026-10-23: EDSC asociado a nuestro software en catalogo-vpfe. La asociación expira el 2028-10-21.
 
 Falta (lo que cubre esta guía): configurar el sistema, verificarlo y emitir la primera factura real.
 
@@ -25,15 +27,30 @@ Se hace con `DIAN_AMBIENTE=2` (el `.env` actual). Sirve para despejar tres dudas
 2. El prefijo en `CorporateRegistrationScheme/ID` de la nota (hoy NCP en habilitación, NCE en producción): confirmar que la DIAN lo acepta.
 3. El `ProfileID` / `DocumentType` del `AttachedDocument` de la nota: confirmar que la DIAN y el correo del cliente lo aceptan.
 
+Comandos (desde la raíz del repo; cargan el `.env`):
+
+```bash
+hab() { (cd backend && set -a && . ../.env && set +a && .venv/bin/python -m estacion.habilitacion "$@"); }
+```
+
 Pasos:
 
 1. `make habilitacion-probar` (certificado, firma y red).
-2. Crear una factura de habilitación: `python -m estacion.habilitacion enviar --usuario <admin>` (desde `backend/`, con el `.env` cargado) y arrancar `make worker-dian`.
-3. Esperar a que quede FACTURADO. Ver con `python -m estacion.habilitacion estado`.
-4. En la web, en Facturación, pulsar **Anular** en esa factura, escribir el motivo y confirmar. La nota sale con prefijo NCP.
-5. Confirmar que la nota queda aceptada por la DIAN. Si la rechaza, el error se ve en el detalle; anotarlo y corregir antes del día de salida.
+2. `hab configurar-numeracion` (activa SETP; si ya está activa no cambia nada). Hace falta antes de `enviar`.
+3. `hab enviar --usuario <admin>` crea una factura de habilitación en la cola. Arrancar `make worker-dian` (con `DIAN_AMBIENTE=2`).
+4. Esperar a que quede FACTURADO. Ver con `hab estado`.
+5. En la web, en Facturación, pulsar **Anular** en esa factura, escribir el motivo y confirmar. La nota sale con prefijo NCP.
+6. Confirmar que la nota queda aceptada por la DIAN. Si la rechaza, el error se ve en el detalle; anotarlo y corregir antes del día de salida.
 
-Esta prueba usa números NCP: no gasta consecutivos NCE.
+Esta prueba usa números NCP: no gasta consecutivos NCE. Al terminar, volver a la numeración de producción solo el día de salida (sección 3).
+
+`DIAN_TEST_SET_ID` en esta prueba (según `facturacion/dian/proveedor.py`):
+
+- Con valor: el worker envía por el set de pruebas (`SendTestSetAsync`, asíncrono; luego consulta por `ZipKey`). Es el camino del set ya pasado.
+- Vacío: el worker envía con `SendBillSync` (modo normal), que es el mismo camino que usará en producción.
+- Recomendado: dejarlo **vacío** para la nota, porque prueba el camino real de producción. Si la DIAN en habilitación rechazara el envío normal
+  por pedir el set, el rechazo lo dirá; en ese caso volver a ponerlo. Qué acepta la DIAN aquí **se confirma al hacer la prueba**.
+- En producción debe estar siempre vacío.
 
 ### 2.2 Dejar la cola de habilitación vacía
 
@@ -43,20 +60,25 @@ Con `DIAN_AMBIENTE=1` ningún documento de habilitación puede quedar pendiente 
 - Si un worker en producción encuentra uno, lo deja FALLIDO con `AMBIENTE_NO_COINCIDE` (queda en `auditoria`) y no habla con la DIAN.
   La factura de ambiente 2 queda EN_PROCESO. **No existe ninguna herramienta para descartarla.**
 
-Cómo detectarlo antes (consulta de solo lectura, desde la raíz del repo):
+Cómo detectarlo antes (consultas de solo lectura, desde la raíz del repo):
 
 ```bash
-docker compose --project-directory . -f infra/docker-compose.yml exec -T db psql -U estacion estacion -c \
-  "SELECT f.numero, f.estado, o.tipo, o.estado FROM outbox o JOIN factura f ON f.id = o.factura_id
-   WHERE o.estado = 'PENDIENTE' AND o.tipo IN ('ENVIAR_DIAN','CONSULTAR_DIAN') AND f.ambiente = '2'"
+psql_db() { docker compose --project-directory . -f infra/docker-compose.yml exec -T db psql -U estacion estacion -c "$1"; }
+psql_db "SELECT f.numero, f.estado, o.tipo, o.estado FROM outbox o JOIN factura f ON f.id = o.factura_id
+       WHERE o.estado = 'PENDIENTE' AND o.tipo IN ('ENVIAR_DIAN','CONSULTAR_DIAN') AND f.ambiente = '2'"
+psql_db "SELECT f.numero, f.estado, o.estado, o.ultimo_error FROM factura f JOIN outbox o ON o.factura_id = f.id
+       WHERE f.ambiente = '2' AND f.estado = 'EN_PROCESO' AND o.estado = 'FALLIDO'"
 ```
+
+La primera lista lo que aún espera en la cola (debe quedar vacía). La segunda lista lo que un worker de producción ya dejó
+FALLIDO con `AMBIENTE_NO_COINCIDE`. También queda un registro con esa acción en `auditoria`.
 
 Qué hacer:
 
 1. Dejar que se resuelvan: con `DIAN_AMBIENTE=2` y `make worker-dian` el worker las envía o las consulta hasta que dejen de estar pendientes.
 2. Repetir la consulta hasta que no devuelva filas.
 3. Solo entonces cambiar a `DIAN_AMBIENTE=1`.
-4. Si una no se resuelve, no inventar SQL a mano: dejarla anotada y consultar antes de tocar la base. Las facturas de habilitación son de prueba y no afectan los reportes de producción (cada documento guarda su ambiente).
+4. Si una no se resuelve, no inventar SQL a mano: dejarla anotada y consultar antes de tocar la base. Las facturas de habilitación son de prueba y no afectan los reportes de producción: cada documento guarda su ambiente y tanto el libro de facturas como el resumen diario filtran por el ambiente configurado.
 
 ## 3. Procedimiento del día de salida
 
@@ -67,10 +89,10 @@ Qué hacer:
    - `DIAN_TEST_SET_ID=` vacío (en producción el worker no arranca con valor).
    - `DIAN_SOFTWARE_ID`, `DIAN_SOFTWARE_PIN`: los del software en producción.
    - `DIAN_CERTIFICADO_RUTA` y `DIAN_CERTIFICADO_CLAVE`: el certificado real de la empresa y vigente. El de `make certificado` (prueba) es rechazado.
-   - `DIAN_CLAVE_TECNICA`: ver la sección 3.1.
+   - `DIAN_CLAVE_TECNICA`: ver la sección 3.1 (se guarda antes de configurar la numeración).
    - `ESTACION_SMTP_*`: la cuenta real (sin `ESTACION_CORREO_SOLO_A`, que limita los destinatarios).
 4. Reiniciar la API para que lea el `.env`. Con `DIAN_AMBIENTE=1` la API no emite si la configuración es incoherente.
-5. Activar la numeración (desde la raíz del repo, lee el `.env`):
+5. Guardar la clave técnica (sección 3.1) y, con `DIAN_CLAVE_TECNICA` ya en el `.env`, activar la numeración (desde la raíz del repo):
    ```bash
    make configurar-produccion PREFIJO=EDSC
    ```
@@ -81,7 +103,7 @@ Qué hacer:
    make verificar-produccion
    ```
    Imprime una lista con ✔/✘ y sale con 0 solo si todo está ✔. No envía documentos. Revisa: variables DIAN, `DIAN_TEST_SET_ID` vacío,
-   certificado vigente y no de prueba, numeración EDSC activa y vigente, `GetNumberingRange` y prefijo, SMTP y cola sin documentos de habilitación.
+   certificado vigente y no de prueba, una numeración activa del ambiente 1 (EDSC) y vigente, `GetNumberingRange` y prefijo, SMTP y cola sin documentos de habilitación.
    Si algo sale ✘, corregirlo y repetir. No seguir hasta que todo esté en ✔.
 7. Arrancar el worker contra producción: `make worker-dian` (es `python -m estacion.worker --proveedor dian`). En el registro debe aparecer
    "proveedor DIAN, ambiente de PRODUCCIÓN". El proveedor simulado no arranca con `DIAN_AMBIENTE=1`.
@@ -93,19 +115,18 @@ Qué hacer:
 
 ### 3.1 La clave técnica
 
-No se copia del portal a ciegas: `configurar-produccion` consulta el rango EDSC con `GetNumberingRange` y lo compara con `DIAN_CLAVE_TECNICA`.
-Si no coincide, no configura nada y lo dice (sin imprimir ninguna de las dos claves).
+La clave técnica del rango EDSC la tiene la DIAN. No se copia del portal a mano: el comando `guardar-clave-tecnica` la consulta con
+`GetNumberingRange` (producción) y la escribe en un archivo nuevo, sin mostrarla.
 
-Lo que se sabe del código:
+1. Elegir una ruta nueva fuera del repositorio, p. ej. `~/clave-edsc.env` (si existe, el comando se niega).
+2. `make guardar-clave-tecnica PREFIJO=EDSC ARCHIVO=~/clave-edsc.env`
+   Exige `DIAN_AMBIENTE=1`. Crea el archivo con permisos 0600 y una sola línea `DIAN_CLAVE_TECNICA=<valor>`. Solo dice dónde la escribió.
+   Se niega si el archivo ya existe, si la DIAN no tiene ese prefijo o si no devuelve clave.
+3. Copiar esa línea al `.env` y **borrar el archivo** (`rm ~/clave-edsc.env`).
+4. Correr `make configurar-produccion PREFIJO=EDSC`. Vuelve a consultar la DIAN y compara con `DIAN_CLAVE_TECNICA`; si no coincide, no activa nada
+   y lo dice, sin imprimir ninguna de las dos claves.
 
-- Ningún comando muestra la clave técnica que devuelve la DIAN; solo la comparan. No hay forma de "verla" sin imprimirla.
-- `DIAN_CLAVE_TECNICA` debe tener un valor antes de correr `configurar-produccion` y `verificar-produccion`.
-
-Qué hacer: **se confirma el día de salida.**
-
-1. Tomar la clave técnica del rango EDSC en el catálogo de producción (donde se asoció el prefijo) y ponerla en `DIAN_CLAVE_TECNICA`. No es la de SETP.
-2. Correr `make configurar-produccion PREFIJO=EDSC`.
-3. Si responde que no coincide: la clave del `.env` está mal copiada (espacios, caracteres) o es la de otro rango. Corregir y repetir. No se activa nada mientras no coincida.
+Nunca pegar la clave en chats, correos ni commits. Es distinta de la de SETP.
 
 ## 4. Anular una factura con nota crédito
 
@@ -154,7 +175,7 @@ Reglas:
 El correo que aparece en la factura (no el remitente SMTP) se muestra o se cambia con un comando; el cambio queda en `auditoria` y solo afecta documentos nuevos:
 
 ```bash
-cd backend && set -a && . ../.env && set +a && .venv/bin/python -m estacion.habilitacion correo-emisor [--nuevo correo@dominio.com]
+hab correo-emisor [--nuevo correo@dominio.com]   # hab: la función de la sección 2.1
 ```
 
 ## 9. Pruebas en Linux
