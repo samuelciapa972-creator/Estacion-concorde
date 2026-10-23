@@ -42,7 +42,7 @@ class Paquete:
     asunto: str
 
 
-def nombre_archivo(prefijo: Literal["ad", "fv", "z"], nit: str, anio: int, consecutivo: int, ext: str) -> str:
+def nombre_archivo(prefijo: Literal["ad", "fv", "nc", "z"], nit: str, anio: int, consecutivo: int, ext: str) -> str:
     if not 1 <= consecutivo <= 0xFFFFFFFF:
         raise ValueError(f"consecutivo de entrega fuera de rango (1 a FFFFFFFF): {consecutivo}")
     return f"{prefijo}{int(nit):010d}000{anio % 100:02d}{consecutivo:08x}.{ext}"

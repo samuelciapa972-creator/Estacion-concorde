@@ -81,6 +81,17 @@ def test_set_de_pruebas_envia_el_zip_y_queda_pendiente():
         assert z.namelist() == [XML] and z.read(XML) == b"<Invoice/>"
 
 
+def test_proveedor_recibe_nc_en_el_nombre():
+    c = ClienteFalso(enviar_sincrono=VALIDA)
+    nota = dataclasses.replace(solicitud(), numero="NCE12", tipo_documento="nc", documento=b"<CreditNote/>")
+    proveedor(c, test_set_id=None).emitir(nota)
+    _, nombre_zip, zip_b64 = c.llamadas[0]
+    assert nombre_zip.startswith("z")  # el ZIP sigue con "z"
+    with zipfile.ZipFile(io.BytesIO(base64.b64decode(zip_b64))) as z:
+        (interno,) = z.namelist()
+        assert interno.startswith("nc") and interno.endswith("0000000c.xml")  # consecutivo 12 en hexadecimal
+
+
 def test_set_sin_zip_key_con_errores_es_rechazo():
     c = ClienteFalso(enviar_set_pruebas=RespuestaEnvioAsincrono("", ("archivo mal formado",)))
     with pytest.raises(ProveedorRechazo, match="archivo mal formado"):

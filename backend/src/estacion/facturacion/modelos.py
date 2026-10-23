@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Literal
 
 
 class EstadoFacturacion(StrEnum):
@@ -93,6 +94,7 @@ class SolicitudFactura:
     numero: str | None = None
     cufe: str | None = None
     documento: bytes | None = None
+    tipo_documento: Literal["fv", "nc"] = "fv"  # factura de venta o nota crédito: prefijo del nombre del XML en el ZIP
 
     @property
     def total(self) -> Decimal:

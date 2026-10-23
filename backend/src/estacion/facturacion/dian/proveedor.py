@@ -50,7 +50,9 @@ class ProveedorDian:
     def emitir(self, solicitud: SolicitudFactura) -> ResultadoEmision | EnvioPendiente:
         if solicitud.documento is None or solicitud.numero is None or solicitud.cufe is None:
             raise ValueError("ProveedorDian necesita el documento firmado, el número y el CUFE")
-        nombre_zip, contenido = self._zip(solicitud.numero, solicitud.fecha_emision, solicitud.documento)
+        nombre_zip, contenido = self._zip(
+            solicitud.numero, solicitud.fecha_emision, solicitud.documento, solicitud.tipo_documento
+        )
         try:
             if self._test_set_id:
                 envio = self._cliente.enviar_set_pruebas(nombre_zip, contenido, self._test_set_id)
@@ -90,12 +92,14 @@ class ProveedorDian:
         return self._resultado(respuesta, clave, numero, cufe, track_id)
 
     # ------------------------------------------------------------------ apoyo
-    def _zip(self, numero: str, fecha: datetime, documento: bytes) -> tuple[str, str]:
+    def _zip(
+        self, numero: str, fecha: datetime, documento: bytes, tipo_documento: Literal["fv", "nc"] = "fv"
+    ) -> tuple[str, str]:
         m = _NUMERO.match(numero)
         if m is None:
             raise ValueError(f"número de factura inesperado: {numero!r}")
         consecutivo = int(m.group(2))
-        nombre_xml = nombre_archivo("fv", self._nit, fecha.year, consecutivo, "xml")
+        nombre_xml = nombre_archivo(tipo_documento, self._nit, fecha.year, consecutivo, "xml")
         nombre_zip = nombre_archivo("z", self._nit, fecha.year, consecutivo, "zip")
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:

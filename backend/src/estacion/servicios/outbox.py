@@ -11,6 +11,12 @@ Resultados de ENVIAR_DIAN:
     sin respuesta   -> factura INCIERTO, origen INCIERTO, y se encola CONSULTAR_DIAN
     EnvioPendiente  -> (set de pruebas) se guarda el track id, la factura sigue EN_PROCESO y se encola CONSULTAR_DIAN
     ProveedorNoConfigurado (certificado / firma del mensaje / reloj) -> la factura no cambia; reintento y auditoría
+Una NOTA CRÉDITO (`factura.tipo = 'NOTA_CREDITO'`) recorre la misma cola, pero no tiene origen propio: sus líneas,
+cliente y forma de pago son los de la factura que anula. Solo cuando la DIAN la ACEPTA, la venta de esa factura pasa a
+NO_FACTURABLE y se audita `FACTURA_ANULADA`; rechazo, resultado incierto y consulta solo cambian la fila de la nota.
+Bloqueos: el worker bloquea el trabajo y la nota, nunca la factura anulada (`ServicioAnulacion` bloquea factura y
+luego nota), así que no hay orden cruzado.
+
 Resultados de CONSULTAR_DIAN (por CUFE, o por el track id de un envío asíncrono):
     existe          -> FACTURADO
     rechazada       -> como un rechazo del envío
@@ -104,7 +110,7 @@ class _Factura:
     id: int
     estado: EstadoFactura
     clave: str
-    origen: Origen
+    origen: Origen | None  # None en una nota crédito: no tiene origen propio, el de la factura que anula se ve aparte
     cliente_id: int
     usuario_id: int
     numero: str
@@ -114,6 +120,8 @@ class _Factura:
     xml: str
     track_id: str | None  # ZipKey de un envío asíncrono (set de pruebas), o None
     ambiente: str  # "1" producción, "2" habilitación (el de la numeración con que se emitió)
+    tipo: str  # 'FACTURA' o 'NOTA_CREDITO'
+    referencia_id: int | None  # la factura que anula una nota; None en una factura
 
 
 def procesar_siguiente(
@@ -203,25 +211,44 @@ def procesar_pendientes(
 def _leer_factura(conn: Conexion, factura_id: int) -> _Factura:
     fila = conn.execute(
         """SELECT id, estado, clave_emision, despacho_id, venta_manual_id, cliente_id, usuario_id, numero, cufe,
-                  medio_pago, fecha_emision, xml_sin_firmar, dian_track_id, ambiente
+                  medio_pago, fecha_emision, xml_sin_firmar, dian_track_id, ambiente, tipo, referencia_id
            FROM factura WHERE id = %s FOR UPDATE""",
         (factura_id,),
     ).fetchone()
     assert fila is not None, "la FK de outbox garantiza que la factura existe"
     fid, estado, clave, despacho_id, venta_id, cliente_id, usuario_id, numero, cufe, medio, fecha, xml, track, amb = (
-        fila
+        fila[:14]
     )
-    origen = Origen("despacho", despacho_id) if despacho_id is not None else Origen("venta_manual", venta_id)
+    tipo, referencia_id = fila[14:]
+    origen = None  # la nota no tiene origen propio
+    if tipo != "NOTA_CREDITO":
+        origen = Origen("despacho", despacho_id) if despacho_id is not None else Origen("venta_manual", venta_id)
     return _Factura(
-        fid, EstadoFactura(estado), clave, origen, cliente_id, usuario_id, numero, cufe, medio, fecha, xml, track, amb
-    )
+        fid, EstadoFactura(estado), clave, origen, cliente_id, usuario_id, numero, cufe, medio, fecha, xml, track, amb,
+        tipo, referencia_id,
+    )  # fmt: skip
+
+
+def _origen_de_la_factura(conn: Conexion, factura_id: int) -> tuple[Origen, int]:
+    """(origen, cliente) de la factura que una nota anula. Sin bloquearla: `ServicioAnulacion` ya la bloqueó
+    (factura y luego nota) y aquí solo se lee; así el worker no puede cruzarse con él en un deadlock."""
+    despacho_id, venta_id, cliente_id = conn.execute(
+        "SELECT despacho_id, venta_manual_id, cliente_id FROM factura WHERE id = %s", (factura_id,)
+    ).fetchone()  # type: ignore[misc]  # la FK de referencia_id garantiza que existe
+    origen = Origen("despacho", despacho_id) if despacho_id is not None else Origen("venta_manual", venta_id)
+    return origen, cliente_id
 
 
 def _solicitud(conn: Conexion, f: _Factura, documento: bytes) -> SolicitudFactura:
-    datos = leer_origen(conn, f.origen, bloquear=False)
+    if f.origen is not None:
+        origen, cliente_id = f.origen, f.cliente_id
+    else:  # nota crédito: las líneas, el cliente y la forma de pago son los de la factura que anula
+        assert f.referencia_id is not None, "una nota crédito siempre referencia una factura"
+        origen, cliente_id = _origen_de_la_factura(conn, f.referencia_id)
+    datos = leer_origen(conn, origen, bloquear=False)
     return SolicitudFactura(
         clave=f.clave,
-        cliente=leer_cliente(conn, f.cliente_id, solo_activos=False),  # ya numerada: se envía aunque se diera de baja
+        cliente=leer_cliente(conn, cliente_id, solo_activos=False),  # ya numerada: se envía aunque se diera de baja
         lineas=(datos.linea,),
         forma_pago=datos.forma_pago,
         medio_pago=f.medio_pago,
@@ -229,6 +256,7 @@ def _solicitud(conn: Conexion, f: _Factura, documento: bytes) -> SolicitudFactur
         numero=f.numero,
         cufe=f.cufe,
         documento=documento,  # el XML FIRMADO
+        tipo_documento="nc" if f.tipo == "NOTA_CREDITO" else "fv",
     )
 
 
@@ -386,9 +414,22 @@ def _aceptada(conn: Conexion, trabajo_id: int, f: _Factura, resultado: Resultado
         )
     _terminar(conn, trabajo_id, "HECHO")
     auditar(conn, "FACTURA_EMITIDA", "factura", f.id, detalle={"numero": f.numero})
+    if f.referencia_id is not None:  # nota aceptada: la factura queda anulada y su venta, cerrada
+        _anular_venta(conn, f)
     # Ya es válida ante la DIAN: ahora se le entrega al cliente (en la misma transacción: no se pierde).
     encolar(conn, f.id, TipoTrabajo.ENVIAR_CORREO)
     return EstadoFactura.FACTURADO
+
+
+def _anular_venta(conn: Conexion, f: _Factura) -> None:
+    """Una nota crédito aceptada anula la factura que referencia: su venta pasa a NO_FACTURABLE (no se vuelve a
+    facturar) y queda auditado en la factura. Solo la nota ACEPTADA lo hace: rechazo, incierto y consulta la dejan."""
+    assert f.referencia_id is not None
+    origen, _ = _origen_de_la_factura(conn, f.referencia_id)
+    conn.execute(
+        f"UPDATE {origen.tipo} SET estado_facturacion = %s WHERE id = %s", (EstadoFacturacion.NO_FACTURABLE, origen.id)
+    )
+    auditar(conn, "FACTURA_ANULADA", "factura", f.referencia_id, detalle={"nota": f.numero})
 
 
 # ------------------------------------------------------------------------------------------ entrega al cliente
@@ -542,10 +583,11 @@ def _marcar(
            WHERE id = %s""",
         (estado, None if error is None else _recortar(error), None if respuesta is None else Jsonb(respuesta), f.id),
     )
-    conn.execute(
-        f"UPDATE {f.origen.tipo} SET estado_facturacion = %s WHERE id = %s",
-        (estado_origen, f.origen.id),
-    )
+    if f.origen is not None:  # una nota no tiene origen: el de la factura anulada solo cambia al aceptarse
+        conn.execute(
+            f"UPDATE {f.origen.tipo} SET estado_facturacion = %s WHERE id = %s",
+            (estado_origen, f.origen.id),
+        )
 
 
 def _terminar(conn: Conexion, trabajo_id: int, estado: str, *, error: str | None = None) -> None:
