@@ -262,6 +262,10 @@ def contador(conn: Conexion, desde: date, hasta: date, ambiente: str, *, comprim
                               "Impuestos", "Total", "Medio", "Origen"), filas, total, {6, 7, 8, 9}))  # fmt: skip
     else:
         cuerpo.append(_nota("Sin facturas en este rango."))
+    cuerpo += [
+        Spacer(1, 2 * mm),
+        _nota("El total de validadas es neto de notas crédito. " + exportacion_contador.AVISO_ANULACIONES),
+    ]
     cuerpo += [Spacer(1, 6 * mm), _nota("<b>Resumen diario</b> (por fecha de la venta)"), Spacer(1, 2 * mm)]
     if dias:
         filas = [[fecha_co(d.fecha.isoformat()), str(d.ventas), _galones(d.galones), _pesos(d.valor_vendido),

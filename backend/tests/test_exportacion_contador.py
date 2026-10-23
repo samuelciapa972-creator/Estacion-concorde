@@ -96,3 +96,16 @@ def test_exportacion_excluye_otro_ambiente(escenario, conn):
     assert exportacion_contador.facturas(conn, *rango, ambiente="1") == []
     pdf = reportes_pdf.contador(conn, *rango, ambiente="1", comprimir=False)
     assert b"(Sin facturas en este rango.) Tj" in pdf
+
+
+def test_aviso_de_anulaciones_en_notas_y_pdf(escenario, conn):
+    e = escenario
+    _factura(e, e.datos.venta_manual(e.usuario), "2026-09-30 10:00")
+    rango = (date(2026, 9, 1), date(2026, 9, 30))
+    libro = load_workbook(io.BytesIO(exportacion_contador.excel(conn, *rango, "2")))
+    textos = [c[0] for c in libro["Notas"].iter_rows(values_only=True)]
+    assert exportacion_contador.AVISO_ANULACIONES in textos
+    pdf = reportes_pdf.contador(conn, *rango, "2", comprimir=False)
+    assert b"neto de notas" in pdf and b"cr\\351dito" in pdf
+    assert b"pueden" in pdf and b"diferir por esas anulaciones" in pdf
+    assert b"anulaciones" not in exportacion_contador.csv_facturas(conn, *rango, "2")  # el CSV es solo datos

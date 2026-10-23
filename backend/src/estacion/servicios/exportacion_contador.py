@@ -60,6 +60,12 @@ class DiaContable:
     valor_sin_factura: Decimal
 
 
+# Se repite en la hoja "Notas" y en el PDF: los dos reportes no concilian por mes cuando hay anulaciones.
+AVISO_ANULACIONES = (
+    "El resumen diario no cuenta las ventas cuya factura fue anulada (ni en su día original); en Facturas la factura "
+    "anulada sigue en su mes y la nota resta en el suyo, así que los totales mensuales de las dos hojas pueden "
+    "diferir por esas anulaciones. Falta confirmarlo con el contador."
+)
 COLUMNAS_FACTURAS = (
     "Fecha", "Número", "CUFE", "Estado", "Tipo doc.", "Documento", "Cliente", "Producto", "Galones", "Base",
     "Impuestos", "Total", "Forma de pago", "Medio de pago", "Origen",
@@ -171,6 +177,7 @@ def excel(conn: Conexion, desde: date, hasta: date, ambiente: str) -> bytes:
         "en todos los estados (FACTURADO es la única validada).",
         "La nota crédito resta en la fecha de la nota, con valor negativo; la factura anulada sigue en su mes, marcada "
         "Anulada. Falta confirmarlo con el contador.",
+        AVISO_ANULACIONES,
         "Resumen diario: por fecha de la venta; despachos del surtidor + ventas manuales sin enlace.",
         "Impuestos en 0: el tratamiento del combustible lo define el contador (el sistema no factura con IVA).",
         "Contiene datos personales (Ley 1581 de 2012): no reenviar fuera de la contabilidad.",
