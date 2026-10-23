@@ -3,7 +3,8 @@
 Sistema de la estación: lectura de despachos de los surtidores, facturación electrónica con motor propio
 (XML UBL 2.1, firma XAdES, CUFE) y entrega al cliente por correo, reportes de ventas y pantallas de pista y
 administración. La cola de envíos usa por defecto el proveedor **simulado** (nada sale a la DIAN); con
-`--proveedor dian` envía al ambiente de **habilitación** de la DIAN (producción está bloqueada en el código).
+`--proveedor dian` envía a la DIAN según `DIAN_AMBIENTE` (2 habilitación, 1 producción; ver
+`docs/salida-a-produccion.md`).
 
 ## Uso
 

@@ -107,6 +107,14 @@ worker-dian:
 habilitacion-probar:
 	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.habilitacion probar-conexion
 
+# Salida a producción (DIAN_AMBIENTE=1 en el .env): ver docs/salida-a-produccion.md
+verificar-produccion:
+	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.habilitacion verificar-produccion
+
+configurar-produccion:
+	@test -n "$(PREFIJO)" || { echo "uso: make configurar-produccion PREFIJO=EDSC"; exit 2; }
+	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.habilitacion configurar-produccion --prefijo "$(PREFIJO)"
+
 mail:
 	$(COMPOSE) up -d mailpit
 
