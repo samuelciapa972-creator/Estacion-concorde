@@ -1,2 +1,7 @@
 Esquemas oficiales UBL 2.1 (OASIS, https://docs.oasis-open.org/ubl/os-UBL-2.1/UBL-2.1.zip), solo los que usan las pruebas.
 No se modifican: validan que el XML generado cumple el estándar.
+
+maindoc/UBL-CreditNote-2.1.xsd: descargado el 2026-10-23 de
+https://docs.oasis-open.org/ubl/os-UBL-2.1/xsd/maindoc/UBL-CreditNote-2.1.xsd (mismo paquete os-UBL-2.1;
+SHA-256 a54651b1225052f811bf2ba01346f13f2454e7cc3e0be290c91dd680dc7b7b1a). Del mismo sitio, el Invoice y el
+CommonAggregateComponents descargados ese día son idénticos byte a byte a los de esta carpeta.

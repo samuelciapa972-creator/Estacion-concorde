@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 
 from lxml import etree
@@ -49,7 +50,7 @@ _AGENCIA = {
 }
 _NIT_DIAN, _DV_DIAN = "800197268", "4"
 _ZONA_HORARIA = "-05:00"  # Colombia, sin horario de verano
-_URL_QR = {
+URL_QR = {
     "1": "https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=",
     "2": "https://catalogo-vpfe-hab.dian.gov.co/document/searchqr?documentkey=",  # SIN VERIFICAR
 }
@@ -140,7 +141,8 @@ def codigo_seguridad_software(software: SoftwareDian, numero: str) -> str:
     return _sha384(f"{software.software_id}{software.pin}{numero}")
 
 
-def _validar(sol: SolicitudFactura, consecutivo: int, numeracion: Numeracion) -> None:
+def validar_solicitud(sol: SolicitudFactura) -> None:
+    """Lo que el generador sabe armar (cliente, pago y líneas); lo comparten la factura y la nota crédito."""
     validar_cliente(sol.cliente)  # lanza ClienteInvalido con TODOS los problemas
     if sol.cliente.tipo_documento not in _TIPO_DOCUMENTO_DIAN:
         raise FacturaNoSoportada(
@@ -160,6 +162,10 @@ def _validar(sol: SolicitudFactura, consecutivo: int, numeracion: Numeracion) ->
             )
         if linea.cantidad <= 0 or linea.precio_unitario <= 0 or linea.valor_total <= 0:
             raise FacturaNoSoportada("cantidad, precio y valor de cada línea deben ser positivos")
+
+
+def _validar(sol: SolicitudFactura, consecutivo: int, numeracion: Numeracion) -> None:
+    validar_solicitud(sol)
     if not numeracion.desde <= consecutivo <= numeracion.hasta:
         raise NumeracionInvalida(
             f"el consecutivo {consecutivo} está fuera del rango autorizado "
@@ -186,55 +192,32 @@ def _direccion(padre: etree._Element, nombre: str, e: Emisor) -> None:
     _sub(pais, "cbc:Name", "Colombia", languageID="es")
 
 
-def construir_factura(
-    sol: SolicitudFactura,
-    *,
-    consecutivo: int,
-    emisor: Emisor,
-    numeracion: Numeracion,
-    software: SoftwareDian,
-) -> FacturaXml:
-    _validar(sol, consecutivo, numeracion)
+def fecha_y_hora(momento: datetime) -> tuple[str, str]:
+    """`IssueDate` e `IssueTime` (con la zona de Colombia), tal como entran también al CUFE/CUDE."""
+    return momento.strftime("%Y-%m-%d"), momento.strftime("%H:%M:%S") + _ZONA_HORARIA
 
-    numero = f"{numeracion.prefijo}{consecutivo}"
-    fecha = sol.fecha_emision.strftime("%Y-%m-%d")
-    hora = sol.fecha_emision.strftime("%H:%M:%S") + _ZONA_HORARIA
-    total = sol.total
-    dv_emisor = str(calcular_dv(emisor.nit))
-    cliente = sol.cliente
-    nombre_cliente = " ".join(f"{cliente.nombres} {cliente.apellidos}".split()).upper()
-    doc_cliente = cliente.numero_documento.strip()
-    tipo_doc = _TIPO_DOCUMENTO_DIAN[cliente.tipo_documento]
 
-    cufe = calcular_cufe(
-        numero=numero,
-        fecha=fecha,
-        hora=hora,
-        valor_factura=total,
-        valor_total=total,
-        nit_emisor=emisor.nit,
-        num_doc_adquirente=doc_cliente,
-        clave_tecnica=numeracion.clave_tecnica,
-        ambiente=software.ambiente,
-    )
-    codigo_sw = codigo_seguridad_software(software, numero)
-    qr = _URL_QR[software.ambiente] + cufe
+def documento_adquirente(sol: SolicitudFactura) -> str:
+    return sol.cliente.numero_documento.strip()
 
-    raiz = etree.Element(f"{{{NS[None]}}}Invoice", nsmap=NS)  # type: ignore[arg-type]  # lxml acepta None (espacio por defecto)
-    raiz.set(f"{{{NS['xsi']}}}schemaLocation", _ESQUEMA_LOCACION)
 
-    # ---- Extensiones: 1) datos DIAN  2) lugar de la firma (la llena el firmador) ----
+def agregar_extensiones(
+    raiz: etree._Element, software: SoftwareDian, *, codigo_sw: str, qr: str, numeracion: Numeracion | None
+) -> None:
+    """1) datos DIAN  2) lugar de la firma (la llena el firmador). Sin `numeracion` no va `sts:InvoiceControl`
+    (las notas crédito no llevan resolución)."""
     extensiones = _sub(raiz, "ext:UBLExtensions")
     dian = _sub(_sub(_sub(extensiones, "ext:UBLExtension"), "ext:ExtensionContent"), "sts:DianExtensions")
-    control = _sub(dian, "sts:InvoiceControl")
-    _sub(control, "sts:InvoiceAuthorization", numeracion.numero_resolucion)
-    periodo = _sub(control, "sts:AuthorizationPeriod")
-    _sub(periodo, "cbc:StartDate", numeracion.vigente_desde.isoformat())
-    _sub(periodo, "cbc:EndDate", numeracion.vigente_hasta.isoformat())
-    autorizadas = _sub(control, "sts:AuthorizedInvoices")
-    _sub(autorizadas, "sts:Prefix", numeracion.prefijo)
-    _sub(autorizadas, "sts:From", str(numeracion.desde))
-    _sub(autorizadas, "sts:To", str(numeracion.hasta))
+    if numeracion is not None:
+        control = _sub(dian, "sts:InvoiceControl")
+        _sub(control, "sts:InvoiceAuthorization", numeracion.numero_resolucion)
+        periodo = _sub(control, "sts:AuthorizationPeriod")
+        _sub(periodo, "cbc:StartDate", numeracion.vigente_desde.isoformat())
+        _sub(periodo, "cbc:EndDate", numeracion.vigente_hasta.isoformat())
+        autorizadas = _sub(control, "sts:AuthorizedInvoices")
+        _sub(autorizadas, "sts:Prefix", numeracion.prefijo)
+        _sub(autorizadas, "sts:From", str(numeracion.desde))
+        _sub(autorizadas, "sts:To", str(numeracion.hasta))
     _sub(
         _sub(dian, "sts:InvoiceSource"),
         "cbc:IdentificationCode",
@@ -265,18 +248,17 @@ def construir_factura(
     _sub(dian, "sts:QRCode", qr)
     _sub(_sub(extensiones, "ext:UBLExtension"), "ext:ExtensionContent")  # aquí va <ds:Signature>
 
-    # ---- Encabezado ----
-    _sub(raiz, "cbc:UBLVersionID", "UBL 2.1")
-    _sub(raiz, "cbc:CustomizationID", "10")
-    _sub(raiz, "cbc:ProfileID", "DIAN 2.1: Factura Electrónica de Venta")
-    _sub(raiz, "cbc:ProfileExecutionID", software.ambiente)
-    _sub(raiz, "cbc:ID", numero)
-    _sub(raiz, "cbc:UUID", cufe, schemeID=software.ambiente, schemeName="CUFE-SHA384")
-    _sub(raiz, "cbc:IssueDate", fecha)
-    _sub(raiz, "cbc:IssueTime", hora)
-    _sub(raiz, "cbc:InvoiceTypeCode", "01")
-    _sub(raiz, "cbc:DocumentCurrencyCode", "COP")
-    _sub(raiz, "cbc:LineCountNumeric", str(len(sol.lineas)))
+
+def agregar_partes_y_totales(
+    raiz: etree._Element, sol: SolicitudFactura, *, emisor: Emisor, prefijo: str, fecha: str
+) -> None:
+    """Vendedor, comprador, pago y totales: iguales en la factura y en la nota crédito que la anula."""
+    total = sol.total
+    dv_emisor = str(calcular_dv(emisor.nit))
+    cliente = sol.cliente
+    nombre_cliente = " ".join(f"{cliente.nombres} {cliente.apellidos}".split()).upper()
+    doc_cliente = documento_adquirente(sol)
+    tipo_doc = _TIPO_DOCUMENTO_DIAN[cliente.tipo_documento]
 
     # ---- Vendedor ----
     vendedor = _sub(raiz, "cac:AccountingSupplierParty")
@@ -299,7 +281,7 @@ def construir_factura(
     # El prefijo del punto de facturación va SIEMPRE (la DIAN rechaza sin él: reglas FAB10a/FAJ50); la matrícula
     # mercantil es opcional.
     registro = _sub(legal, "cac:CorporateRegistrationScheme")
-    _sub(registro, "cbc:ID", numeracion.prefijo)
+    _sub(registro, "cbc:ID", prefijo)
     if emisor.matricula_mercantil:
         _sub(registro, "cbc:Name", emisor.matricula_mercantil)
     contacto = _sub(parte, "cac:Contact")
@@ -339,12 +321,15 @@ def construir_factura(
     _sub(monetario, "cbc:PrepaidAmount", _dec6(Decimal(0)), currencyID="COP")
     _sub(monetario, "cbc:PayableAmount", _dec6(total), currencyID="COP")
 
-    # ---- Líneas ----
+
+def agregar_lineas(raiz: etree._Element, sol: SolicitudFactura, *, etiqueta: str, etiqueta_cantidad: str) -> None:
+    """`cac:InvoiceLine`/`cbc:InvoicedQuantity` en la factura, `cac:CreditNoteLine`/`cbc:CreditedQuantity` en la
+    nota crédito; el resto de la línea es igual."""
     for i, linea in enumerate(sol.lineas, start=1):
-        el = _sub(raiz, "cac:InvoiceLine")
+        el = _sub(raiz, etiqueta)
         _sub(el, "cbc:ID", str(i))
         _sub(el, "cbc:Note", linea.descripcion)
-        _sub(el, "cbc:InvoicedQuantity", _dec6(linea.cantidad), unitCode=linea.unidad)
+        _sub(el, etiqueta_cantidad, _dec6(linea.cantidad), unitCode=linea.unidad)
         # El valor de la línea es lo que COBRÓ el surtidor; cantidad x precio puede diferir en pesos por redondeo.
         _sub(el, "cbc:LineExtensionAmount", _dec6(linea.valor_total), currencyID="COP")
         item = _sub(el, "cac:Item")
@@ -360,6 +345,55 @@ def construir_factura(
         precio = _sub(el, "cac:Price")
         _sub(precio, "cbc:PriceAmount", _dec6(linea.precio_unitario), currencyID="COP")
         _sub(precio, "cbc:BaseQuantity", _dec6(linea.cantidad), unitCode=linea.unidad)
+
+
+def construir_factura(
+    sol: SolicitudFactura,
+    *,
+    consecutivo: int,
+    emisor: Emisor,
+    numeracion: Numeracion,
+    software: SoftwareDian,
+) -> FacturaXml:
+    _validar(sol, consecutivo, numeracion)
+
+    numero = f"{numeracion.prefijo}{consecutivo}"
+    fecha, hora = fecha_y_hora(sol.fecha_emision)
+    total = sol.total
+
+    cufe = calcular_cufe(
+        numero=numero,
+        fecha=fecha,
+        hora=hora,
+        valor_factura=total,
+        valor_total=total,
+        nit_emisor=emisor.nit,
+        num_doc_adquirente=documento_adquirente(sol),
+        clave_tecnica=numeracion.clave_tecnica,
+        ambiente=software.ambiente,
+    )
+    codigo_sw = codigo_seguridad_software(software, numero)
+    qr = URL_QR[software.ambiente] + cufe
+
+    raiz = etree.Element(f"{{{NS[None]}}}Invoice", nsmap=NS)  # type: ignore[arg-type]  # lxml acepta None (espacio por defecto)
+    raiz.set(f"{{{NS['xsi']}}}schemaLocation", _ESQUEMA_LOCACION)
+    agregar_extensiones(raiz, software, codigo_sw=codigo_sw, qr=qr, numeracion=numeracion)
+
+    # ---- Encabezado ----
+    _sub(raiz, "cbc:UBLVersionID", "UBL 2.1")
+    _sub(raiz, "cbc:CustomizationID", "10")
+    _sub(raiz, "cbc:ProfileID", "DIAN 2.1: Factura Electrónica de Venta")
+    _sub(raiz, "cbc:ProfileExecutionID", software.ambiente)
+    _sub(raiz, "cbc:ID", numero)
+    _sub(raiz, "cbc:UUID", cufe, schemeID=software.ambiente, schemeName="CUFE-SHA384")
+    _sub(raiz, "cbc:IssueDate", fecha)
+    _sub(raiz, "cbc:IssueTime", hora)
+    _sub(raiz, "cbc:InvoiceTypeCode", "01")
+    _sub(raiz, "cbc:DocumentCurrencyCode", "COP")
+    _sub(raiz, "cbc:LineCountNumeric", str(len(sol.lineas)))
+
+    agregar_partes_y_totales(raiz, sol, emisor=emisor, prefijo=numeracion.prefijo, fecha=fecha)
+    agregar_lineas(raiz, sol, etiqueta="cac:InvoiceLine", etiqueta_cantidad="cbc:InvoicedQuantity")
 
     xml = etree.tostring(raiz, xml_declaration=True, encoding="UTF-8")
     return FacturaXml(xml=xml, arbol=raiz, numero=numero, cufe=cufe, qr=qr, codigo_seguridad_software=codigo_sw)
