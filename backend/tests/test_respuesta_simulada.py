@@ -10,6 +10,7 @@ from lxml import etree
 from estacion.facturacion.proveedor import ProveedorSimulado
 from estacion.facturacion.respuesta_simulada import NOTA_SIMULADA, generar_respuesta
 from test_xml_factura import construir, solicitud
+from test_xml_nota import NUMERACION_EDSC, SOFTWARE_PRODUCCION, nota
 
 NS = {
     "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
@@ -43,3 +44,14 @@ def test_el_simulado_la_devuelve_cuando_hay_documento():
 
 def test_sin_documento_no_hay_respuesta():
     assert ProveedorSimulado().emitir(solicitud()).application_response is None
+
+
+def test_respuesta_simulada_de_una_nota(esquema_ubl):
+    n = nota(construir(consecutivo=1, software=SOFTWARE_PRODUCCION, numeracion=NUMERACION_EDSC))
+    r = etree.fromstring(generar_respuesta(n.xml, validada_en=VALIDADA))
+    assert esquema_ubl("ApplicationResponse").validate(r)
+    t = lambda p: r.findtext(p, namespaces=NS)  # noqa: E731
+    assert t("cbc:Note") == NOTA_SIMULADA and t("cbc:ProfileExecutionID") == "1"
+    assert t("cac:DocumentResponse/cac:DocumentReference/cbc:ID") == "NCE1"
+    assert t("cac:DocumentResponse/cac:DocumentReference/cbc:UUID") == n.cufe
+    assert t("cac:ReceiverParty/cac:PartyTaxScheme/cbc:CompanyID") == "900123456"

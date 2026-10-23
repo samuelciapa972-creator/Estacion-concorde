@@ -275,3 +275,15 @@ def test_probar_correo(grabador, monkeypatch, capsys):
     grabador.error_login = smtplib.SMTPAuthenticationError(535, b"no")
     assert probar_correo.main(["ana@example.com"]) == 1
     assert "credenciales" in capsys.readouterr().err
+
+
+def test_correo_de_nota_dice_nota_credito():
+    nota = mensaje_factura(
+        remitente="estacion@example.com", destinatario="ana@example.com",
+        asunto="900123456;EDS PRUEBA SAS;NCP1;91;EDS PRUEBA", nombre_zip="z.zip", zip=b"PK\x03\x04", prueba=True,
+        tipo_documento="nc",
+    )  # fmt: skip
+    assert "nota crédito electrónica NCP1 de EDS PRUEBA SAS" in nota.texto
+    assert "BANCO DE PRUEBAS: esta nota crédito no tiene validez fiscal" in nota.texto
+    assert "factura" not in nota.texto and "nota crédito" in nota.html
+    assert "factura electrónica SETP1" in M.texto  # por defecto sigue siendo factura

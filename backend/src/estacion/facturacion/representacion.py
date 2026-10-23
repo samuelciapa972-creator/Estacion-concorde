@@ -20,6 +20,7 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Literal
 
 from lxml import etree
 from reportlab.graphics import renderPDF
@@ -55,6 +56,9 @@ class LineaRepresentacion:
 
 @dataclass(frozen=True, slots=True)
 class DatosRepresentacion:
+    tipo: Literal["FACTURA", "NOTA_CREDITO"]
+    factura_referencia: str | None  # en una nota: el número de la factura que anula
+    motivo: str | None  # en una nota: el motivo de la anulación
     ambiente: str
     numero: str
     fecha: str  # AAAA-MM-DD
@@ -73,7 +77,7 @@ class DatosRepresentacion:
     telefono: str
     email: str
     nit_proveedor_software: str
-    # Numeración
+    # Numeración (vacía en una nota crédito: no lleva resolución propia)
     resolucion: str
     vigente_desde: str
     vigente_hasta: str
@@ -125,20 +129,26 @@ def leer_xml(xml: bytes) -> DatosRepresentacion:
         raiz = etree.fromstring(xml, parser=etree.XMLParser(resolve_entities=False, no_network=True))
     except etree.XMLSyntaxError as e:
         raise RepresentacionInvalida(f"XML ilegible: {e}") from None
+    nota = etree.QName(raiz).localname == "CreditNote"
+    if not nota and etree.QName(raiz).localname != "Invoice":
+        raise RepresentacionInvalida(f"documento {etree.QName(raiz).localname!r} desconocido: no se rotula a ciegas")
     dian = "ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/sts:DianExtensions"
     sup = "cac:AccountingSupplierParty/cac:Party"
     cus = "cac:AccountingCustomerParty/cac:Party"
     tot = "cac:LegalMonetaryTotal"
 
     lineas = []
-    for el in raiz.findall("cac:InvoiceLine", _NS):
+    etiqueta_linea, etiqueta_cantidad = (
+        ("CreditNoteLine", "CreditedQuantity") if nota else ("InvoiceLine", "InvoicedQuantity")
+    )
+    for el in raiz.findall(f"cac:{etiqueta_linea}", _NS):
         lineas.append(
             LineaRepresentacion(
                 item=_texto(el, "cbc:ID"),
                 codigo=_texto(el, "cac:Item/cac:SellersItemIdentification/cbc:ID"),
                 descripcion=_texto(el, "cac:Item/cbc:Description"),
-                unidad=_atributo(el, "cbc:InvoicedQuantity", "unitCode"),
-                cantidad=Decimal(_texto(el, "cbc:InvoicedQuantity")),
+                unidad=_atributo(el, f"cbc:{etiqueta_cantidad}", "unitCode"),
+                cantidad=Decimal(_texto(el, f"cbc:{etiqueta_cantidad}")),
                 precio_unitario=Decimal(_texto(el, "cac:Price/cbc:PriceAmount")),
                 valor_total=Decimal(_texto(el, "cbc:LineExtensionAmount")),
             )
@@ -147,12 +157,16 @@ def leer_xml(xml: bytes) -> DatosRepresentacion:
         raise RepresentacionInvalida("la factura no tiene líneas")
 
     # El generador actual no emite impuestos; si un XML los trae, este PDF todavía no sabe mostrarlos.
-    if raiz.find("cac:TaxTotal", _NS) is not None or raiz.find("cac:InvoiceLine/cac:TaxTotal", _NS) is not None:
+    if raiz.find("cac:TaxTotal", _NS) is not None or raiz.find(f"cac:{etiqueta_linea}/cac:TaxTotal", _NS) is not None:
         raise RepresentacionInvalida("factura con impuestos: la representación todavía no los muestra")
 
     bruto_xml = _texto(raiz, f"{tot}/cbc:LineExtensionAmount")
     total_xml = _texto(raiz, f"{tot}/cbc:PayableAmount")
+    control = "" if nota else f"{dian}/sts:InvoiceControl"
     return DatosRepresentacion(
+        tipo="NOTA_CREDITO" if nota else "FACTURA",
+        factura_referencia=_texto(raiz, "cac:DiscrepancyResponse/cbc:ReferenceID") if nota else None,
+        motivo=_texto(raiz, "cac:DiscrepancyResponse/cbc:Description") if nota else None,
         ambiente=_texto(raiz, "cbc:ProfileExecutionID"),
         numero=_texto(raiz, "cbc:ID"),
         fecha=_texto(raiz, "cbc:IssueDate"),
@@ -170,12 +184,12 @@ def leer_xml(xml: bytes) -> DatosRepresentacion:
         telefono=_texto(raiz, f"{sup}/cac:Contact/cbc:Telephone"),
         email=_texto(raiz, f"{sup}/cac:Contact/cbc:ElectronicMail"),
         nit_proveedor_software=_texto(raiz, f"{dian}/sts:SoftwareProvider/sts:ProviderID"),
-        resolucion=_texto(raiz, f"{dian}/sts:InvoiceControl/sts:InvoiceAuthorization"),
-        vigente_desde=_texto(raiz, f"{dian}/sts:InvoiceControl/sts:AuthorizationPeriod/cbc:StartDate"),
-        vigente_hasta=_texto(raiz, f"{dian}/sts:InvoiceControl/sts:AuthorizationPeriod/cbc:EndDate"),
-        prefijo=_texto(raiz, f"{dian}/sts:InvoiceControl/sts:AuthorizedInvoices/sts:Prefix"),
-        rango_desde=_texto(raiz, f"{dian}/sts:InvoiceControl/sts:AuthorizedInvoices/sts:From"),
-        rango_hasta=_texto(raiz, f"{dian}/sts:InvoiceControl/sts:AuthorizedInvoices/sts:To"),
+        resolucion="" if nota else _texto(raiz, f"{control}/sts:InvoiceAuthorization"),
+        vigente_desde="" if nota else _texto(raiz, f"{control}/sts:AuthorizationPeriod/cbc:StartDate"),
+        vigente_hasta="" if nota else _texto(raiz, f"{control}/sts:AuthorizationPeriod/cbc:EndDate"),
+        prefijo="" if nota else _texto(raiz, f"{control}/sts:AuthorizedInvoices/sts:Prefix"),
+        rango_desde="" if nota else _texto(raiz, f"{control}/sts:AuthorizedInvoices/sts:From"),
+        rango_hasta="" if nota else _texto(raiz, f"{control}/sts:AuthorizedInvoices/sts:To"),
         comprador_nombre=_texto(raiz, f"{cus}/cac:PartyTaxScheme/cbc:RegistrationName"),
         comprador_tipo=_codigo(
             _TIPO_DOC, _atributo(raiz, f"{cus}/cac:PartyIdentification/cbc:ID", "schemeName"), "tipo de documento"
@@ -201,6 +215,9 @@ def texto_validacion(respuesta: dict[str, object] | None) -> str:
         return "SIMULADA (banco de pruebas): no se envió a la DIAN"
     fecha = (respuesta or {}).get("fecha_validacion")
     return str(fecha) if fecha else "SIN DATO DE VALIDACIÓN"
+
+
+_ETIQUETA_CODIGO = {"FACTURA": "CUFE", "NOTA_CREDITO": "CUDE"}
 
 
 def contenido_qr(d: DatosRepresentacion) -> str:
@@ -230,7 +247,7 @@ def contenido_qr(d: DatosRepresentacion) -> str:
             f"ValIva: {_dec2(d.impuestos)}",
             f"ValOtroIm: {_dec2(Decimal(0))}",
             f"ValTolFac: {d.valor_total_xml}",
-            f"CUFE: {d.cufe}",
+            f"{_ETIQUETA_CODIGO[d.tipo]}: {d.cufe}",
             d.url_qr,
         ]
     )
@@ -335,13 +352,15 @@ def generar_pdf(d: DatosRepresentacion, *, validacion: str, comprimir: bool = Tr
     """PDF de una página (carta). `validacion`: texto de la validación de la DIAN (fecha, o "SIMULADA…")."""
     salida = io.BytesIO()
     c = Canvas(salida, pagesize=letter, pageCompression=1 if comprimir else 0, invariant=1)
-    c.setTitle(f"Factura electrónica de venta {d.numero}")
+    c.setTitle(f"{_nombre_documento(d).capitalize()} {d.numero}")
     c.setAuthor(d.razon_social)
     c.setCreator("estacion (software propio)")
 
     if d.ambiente != "1":
         _marca_sin_validez(c)
     y = _encabezado(c, d)
+    if d.tipo == "NOTA_CREDITO":
+        y = _anulacion(c, d, y - 4 * mm)
     y = _comprador(c, d, y - 4 * mm)
     y = _items(c, d, y - 4 * mm)
     y = _totales(c, d, y - 4 * mm)
@@ -349,6 +368,25 @@ def generar_pdf(d: DatosRepresentacion, *, validacion: str, comprimir: bool = Tr
     c.showPage()
     c.save()
     return salida.getvalue()
+
+
+def _nombre_documento(d: DatosRepresentacion) -> str:
+    return "nota crédito electrónica" if d.tipo == "NOTA_CREDITO" else "factura electrónica de venta"
+
+
+def _anulacion(c: Canvas, d: DatosRepresentacion, arriba: float) -> float:
+    """Solo en la nota: qué factura anula y por qué (partido en renglones; el motivo lo escribe una persona)."""
+    ancho = _ANCHO - 2 * _MARGEN
+    texto = f"Anula la factura {d.factura_referencia} — Motivo: {d.motivo}"
+    renglones = simpleSplit(texto, "Helvetica-Bold", 8.5, ancho - 4 * mm)
+    alto = (len(renglones) * 4 + 2) * mm
+    _caja(c, _MARGEN, arriba, ancho, alto)
+    c.setFont("Helvetica-Bold", 8.5)
+    y = arriba - 4.5 * mm
+    for renglon in renglones:
+        c.drawString(_MARGEN + 2 * mm, y, renglon)
+        y -= 4 * mm
+    return arriba - alto
 
 
 def _marca_sin_validez(c: Canvas) -> None:
@@ -373,7 +411,7 @@ def _encabezado(c: Canvas, d: DatosRepresentacion) -> float:
     ancho_num = 62 * mm
     _caja(c, _MARGEN, arriba, ancho_num, 30 * mm)
     c.setFont("Helvetica-Bold", 8)
-    c.drawString(_MARGEN + 2 * mm, arriba - 5 * mm, "FACTURA ELECTRÓNICA DE VENTA N°")
+    c.drawString(_MARGEN + 2 * mm, arriba - 5 * mm, f"{_nombre_documento(d).upper()} N°")
     c.setFont("Helvetica-Bold", 13)
     c.drawString(_MARGEN + 2 * mm, arriba - 11 * mm, d.numero)
     c.setFont("Helvetica-Bold", 8)
@@ -407,11 +445,14 @@ def _encabezado(c: Canvas, d: DatosRepresentacion) -> float:
         c.setFont("Helvetica-Bold", 9)
         c.drawCentredString(centro, yy, d.nombre_comercial)
         yy -= 3.8 * mm
-    renglones = [
-        "RESPONSABLE DE IVA" if d.responsable_iva else "NO RESPONSABLE DE IVA",
-        f"AUTORIZACIÓN DE NUMERACIÓN DE FACTURACIÓN DIAN No. {d.resolucion}",
-        f"VIGENCIA DEL {fecha_co(d.vigente_desde)} AL {fecha_co(d.vigente_hasta)}",
-        f"DESDE EL No. {d.prefijo}-{d.rango_desde} HASTA EL No. {d.prefijo}-{d.rango_hasta}",
+    renglones = ["RESPONSABLE DE IVA" if d.responsable_iva else "NO RESPONSABLE DE IVA"]
+    if d.tipo == "FACTURA":  # la nota no lleva resolución de numeración
+        renglones += [
+            f"AUTORIZACIÓN DE NUMERACIÓN DE FACTURACIÓN DIAN No. {d.resolucion}",
+            f"VIGENCIA DEL {fecha_co(d.vigente_desde)} AL {fecha_co(d.vigente_hasta)}",
+            f"DESDE EL No. {d.prefijo}-{d.rango_desde} HASTA EL No. {d.prefijo}-{d.rango_hasta}",
+        ]
+    renglones += [
         f"{d.direccion} · {d.municipio} - {d.departamento}",
         f"Tel: {d.telefono} · {d.email}",
     ]
@@ -530,7 +571,11 @@ def _totales(c: Canvas, d: DatosRepresentacion, arriba: float) -> float:
     ancho_izq = ancho_total - ancho_tot - 3 * mm
     c.rect(_MARGEN, fondo, ancho_izq, len(filas) * alto_fila)
     c.setFont("Helvetica-Bold", 8)
-    c.drawString(_MARGEN + 2 * mm, arriba - 4.5 * mm, "VALOR FACTURA EN LETRAS:")
+    c.drawString(
+        _MARGEN + 2 * mm,
+        arriba - 4.5 * mm,
+        "VALOR NOTA EN LETRAS:" if d.tipo == "NOTA_CREDITO" else "VALOR FACTURA EN LETRAS:",
+    )
     c.setFont("Helvetica", 8.5)
     yy = arriba - 9 * mm
     for r in simpleSplit(valor_en_letras(d.valor_total), "Helvetica", 8.5, ancho_izq - 4 * mm):
@@ -549,7 +594,7 @@ def _pie(c: Canvas, d: DatosRepresentacion, arriba: float, validacion: str) -> N
 
     ancho_texto = _ANCHO - 2 * _MARGEN - lado_qr - 5 * mm
     c.setFont("Helvetica-Bold", 8)
-    c.drawString(_MARGEN, arriba - 4 * mm, "CUFE:")
+    c.drawString(_MARGEN, arriba - 4 * mm, f"{_ETIQUETA_CODIGO[d.tipo]}:")
     c.setFont("Courier", 7.5)
     yy = arriba - 8 * mm
     mitad = len(d.cufe) // 2
@@ -563,8 +608,8 @@ def _pie(c: Canvas, d: DatosRepresentacion, arriba: float, validacion: str) -> N
     yy -= 8 * mm
     c.setFont("Helvetica", 7)
     for r in simpleSplit(
-        "Representación gráfica de la factura electrónica de venta. Consulte su validez en el catálogo de la DIAN "
-        "con el CUFE o escaneando el código QR.",
+        f"Representación gráfica de la {_nombre_documento(d)}. Consulte su validez en el catálogo de la DIAN "
+        f"con el {_ETIQUETA_CODIGO[d.tipo]} o escaneando el código QR.",
         "Helvetica",
         7,
         ancho_texto,
@@ -582,6 +627,7 @@ def _pie(c: Canvas, d: DatosRepresentacion, arriba: float, validacion: str) -> N
 
 # Datos de ejemplo para los doctests (SINTÉTICOS).
 _EJEMPLO = DatosRepresentacion(
+    tipo="FACTURA", factura_referencia=None, motivo=None,
     ambiente="2", numero="PRUE1", fecha="2026-10-01", hora="20:13:14-05:00", cufe="a" * 96,
     url_qr="https://catalogo-vpfe-hab.dian.gov.co/document/searchqr?documentkey=" + "a" * 96,
     razon_social="EMPRESA FICTICIA DE PRUEBA S A S", nombre_comercial="BANCO DE PRUEBAS", nit="900123456", dv="8",

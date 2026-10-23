@@ -12,6 +12,7 @@ from estacion.facturacion import paquete
 from estacion.facturacion.firma import firmar_xml
 from estacion.facturacion.respuesta_simulada import generar_respuesta
 from test_xml_factura import construir
+from test_xml_nota import NUMERACION_EDSC, SOFTWARE_PRODUCCION, nota
 
 AHORA = datetime(2026, 9, 29, 10, 30)
 
@@ -65,3 +66,25 @@ def test_asunto_sin_separadores_dentro_de_los_campos(certificado):
     f = construir()
     xml = f.xml.replace(b"ESTACION DE PRUEBA S A S", b"ESTACION; DE PRUEBA\nS A S")
     assert paquete.asunto(xml).split(";")[1] == "ESTACION, DE PRUEBA S A S"
+
+
+def _nota_firmada(certificado):
+    n = nota(construir(consecutivo=1, software=SOFTWARE_PRODUCCION, numeracion=NUMERACION_EDSC))
+    return firmar_xml(n.xml, certificado)
+
+
+def test_asunto_de_nota_lleva_91(certificado):
+    assert paquete.asunto(_nota_firmada(certificado)) == (
+        "900123456;ESTACION DE PRUEBA S A S;NCE1;91;ESTACION DE PRUEBA S A S"
+    )
+
+
+def test_zip_de_nota_nombra_el_pdf_con_nc(certificado):
+    firmada = _nota_firmada(certificado)
+    ar = generar_respuesta(firmada, validada_en=datetime(2026, 10, 2, 8, 10))
+    p = paquete.armar(firmada, ar, consecutivo=10, ahora=datetime(2026, 10, 2, 8, 30), certificado=certificado,
+                      validacion="SIMULADA")  # fmt: skip
+    with zipfile.ZipFile(io.BytesIO(p.zip)) as z:
+        assert sorted(z.namelist()) == ["ad0900123456000260000000a.xml", "nc0900123456000260000000a.pdf"]
+        assert b"CreditNote" in z.read("ad0900123456000260000000a.xml")
+        assert z.read("nc0900123456000260000000a.pdf").startswith(b"%PDF")

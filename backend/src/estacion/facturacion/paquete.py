@@ -54,7 +54,7 @@ def _campo(raiz: etree._Element, *rutas: str) -> str:
         if valor and valor.strip():
             # Un ";" o un salto de línea dentro de un campo correría los demás: se neutralizan.
             return " ".join(valor.replace(";", ",").split())
-    raise ValueError(f"la factura no tiene {rutas[0]}")
+    raise ValueError(f"el documento no tiene {rutas[0]}")
 
 
 def asunto(factura_xml: bytes) -> str:
@@ -64,7 +64,7 @@ def asunto(factura_xml: bytes) -> str:
             _campo(raiz, _VENDEDOR + "cac:PartyTaxScheme/cbc:CompanyID"),
             _campo(raiz, _VENDEDOR + "cac:PartyTaxScheme/cbc:RegistrationName"),
             _campo(raiz, "cbc:ID"),
-            _campo(raiz, "cbc:InvoiceTypeCode"),
+            _campo(raiz, "cbc:InvoiceTypeCode", "cbc:CreditNoteTypeCode"),
             _campo(raiz, _VENDEDOR + "cac:PartyName/cbc:Name", _VENDEDOR + "cac:PartyTaxScheme/cbc:RegistrationName"),
         ]
     )
@@ -81,6 +81,12 @@ def armar(
 ) -> Paquete:
     """Arma el ZIP de entrega. `ahora`: hora local (fecha del contenedor y de los archivos dentro del ZIP)."""
     nit = asunto(factura_firmada).split(";")[0]
+    es_nota = (
+        etree.QName(
+            etree.fromstring(factura_firmada, etree.XMLParser(resolve_entities=False, no_network=True))
+        ).localname
+        == "CreditNote"
+    )
     nombre = lambda prefijo, ext: nombre_archivo(prefijo, nit, ahora.year, consecutivo, ext)  # noqa: E731
     contenedor = construir_attached(
         factura_firmada, application_response, consecutivo=consecutivo, ahora=ahora, certificado=certificado
@@ -89,7 +95,7 @@ def armar(
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
-        for archivo, contenido in ((nombre("ad", "xml"), contenedor), (nombre("fv", "pdf"), pdf)):
+        for archivo, contenido in ((nombre("ad", "xml"), contenedor), (nombre("nc" if es_nota else "fv", "pdf"), pdf)):
             info = zipfile.ZipInfo(archivo, date_time=ahora.timetuple()[:6])
             info.compress_type = zipfile.ZIP_DEFLATED
             z.writestr(info, contenido)

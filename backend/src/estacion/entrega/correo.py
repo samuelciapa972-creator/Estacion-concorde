@@ -55,15 +55,25 @@ class EnviadorCorreo(Protocol):
 
 
 def mensaje_factura(
-    *, remitente: str, destinatario: str, asunto: str, nombre_zip: str, zip: bytes, prueba: bool
+    *,
+    remitente: str,
+    destinatario: str,
+    asunto: str,
+    nombre_zip: str,
+    zip: bytes,
+    prueba: bool,
+    tipo_documento: Literal["fv", "nc"] = "fv",
 ) -> Mensaje:
     """El correo de entrega. El cuerpo no está reglamentado; el asunto sí (ver `facturacion/paquete.asunto`)."""
     campos = asunto.split(";")
     numero = campos[2] if len(campos) > 2 else ""
     emisor = campos[1] if len(campos) > 1 else ""
-    aviso = "BANCO DE PRUEBAS: esta factura no tiene validez fiscal y no fue enviada a la DIAN.\n\n" if prueba else ""
+    documento = "nota crédito" if tipo_documento == "nc" else "factura"
+    aviso = (
+        f"BANCO DE PRUEBAS: esta {documento} no tiene validez fiscal y no fue enviada a la DIAN.\n\n" if prueba else ""
+    )
     texto = (
-        f"{aviso}Adjuntamos su factura electrónica {numero} de {emisor}.\n"
+        f"{aviso}Adjuntamos su {documento} electrónica {numero} de {emisor}.\n"
         f"El archivo {nombre_zip} contiene el documento electrónico (XML) y su representación gráfica (PDF).\n"
     )
     html = "".join(f"<p>{escape(linea)}</p>" for linea in texto.splitlines() if linea)

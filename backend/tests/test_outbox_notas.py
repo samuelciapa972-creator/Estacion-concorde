@@ -1,13 +1,15 @@
 """La cola (`servicios/outbox.py`) con notas crédito: firma, envía, concilia y cierra la venta anulada.
 
-Nada sale hacia la DIAN: `ProveedorSimulado`. La entrega de la nota por correo (PDF + AttachedDocument de
-CreditNote) es de otra tarea; aquí solo se comprueba que el trabajo ENVIAR_CORREO queda encolado.
+Nada sale hacia la DIAN: `ProveedorSimulado`. También se comprueba la entrega
+de la nota por correo (ZIP con el AttachedDocument de CreditNote y su PDF).
 """
 
 from __future__ import annotations
 
 import dataclasses
+import io
 import uuid
+import zipfile
 from datetime import datetime
 
 import pytest
@@ -127,10 +129,35 @@ def test_nota_incierta_no_toca_la_venta(escenario, conn, recursos):
     assert estado_venta(escenario, origen) == "FACTURADO"
     assert estado_factura(escenario, factura_id) == "FACTURADO"
     # La conciliación (la DIAN no tiene la nota) reenvía la nota sin tocar la venta, y luego la acepta.
-    hechos = procesar_pendientes(conn, proveedor, recursos=recursos)
-    assert hechos[0].tipo == TipoTrabajo.CONSULTAR_DIAN
+    # Se detiene antes de la entrega (ENVIAR_CORREO): este test es de la conciliación, no del correo.
+    hechos = procesar_pendientes(conn, proveedor, limite=2, recursos=recursos)
+    assert [h.tipo for h in hechos] == [TipoTrabajo.CONSULTAR_DIAN, TipoTrabajo.ENVIAR_DIAN]
     assert estado_factura(escenario, nota.id) == "FACTURADO"
     assert estado_venta(escenario, origen) == "NO_FACTURABLE"
+
+
+def test_correo_de_la_nota_se_entrega(escenario, conn, recursos):
+    factura_id, _ = facturar(escenario, conn, recursos)
+    nota = anular(escenario, conn, factura_id)
+    recursos.enviador.enviados.clear()  # el correo de la factura ya salió en facturar()
+
+    hechos = procesar_pendientes(conn, ProveedorSimulado(), recursos=recursos)
+
+    assert [(h.factura_id, h.tipo) for h in hechos] == [
+        (nota.id, TipoTrabajo.ENVIAR_DIAN),
+        (nota.id, TipoTrabajo.ENVIAR_CORREO),
+    ]
+    (mensaje,) = recursos.enviador.enviados
+    assert mensaje.asunto.split(";")[2:4] == ["NCP1", "91"]
+    assert "nota crédito electrónica NCP1" in mensaje.texto
+    with zipfile.ZipFile(io.BytesIO(mensaje.adjunto)) as z:
+        pdf = next(n for n in z.namelist() if n.endswith(".pdf"))
+        assert pdf.startswith("nc")
+        assert b"CreditNote" in z.read(next(n for n in z.namelist() if n.startswith("ad")))
+    assert acciones(escenario, nota.id)[-2:] == ["FACTURA_EMITIDA", "FACTURA_ENTREGADA"]
+    assert escenario.datos.conn.execute(
+        "SELECT tipo, estado FROM outbox WHERE factura_id = %s ORDER BY id", (nota.id,)
+    ).fetchall() == [("ENVIAR_DIAN", "HECHO"), ("ENVIAR_CORREO", "HECHO")]
 
 
 def test_nota_de_otro_ambiente_no_se_envia(escenario, conn, recursos):

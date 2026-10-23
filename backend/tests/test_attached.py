@@ -12,6 +12,7 @@ from estacion.facturacion.attached import RESPONSABILIDAD_RECEPTOR_SIN_DATO, Att
 from estacion.facturacion.firma import firmar_xml
 from estacion.facturacion.respuesta_simulada import generar_respuesta
 from test_xml_factura import construir
+from test_xml_nota import NUMERACION_EDSC, SOFTWARE_PRODUCCION, nota
 
 AHORA = datetime(2026, 9, 29, 10, 30)
 NS = {
@@ -91,3 +92,21 @@ def test_respuesta_de_otra_factura(piezas, certificado):
     ar_otra = generar_respuesta(otra.xml, validada_en=AHORA)
     with pytest.raises(AttachedInvalido, match="otra factura"):
         construir_attached(firmada, ar_otra, consecutivo=1, ahora=AHORA, certificado=certificado)
+
+
+def test_attached_de_una_nota_valida_contra_xsd(certificado, esquema_ubl):
+    n = nota(construir(consecutivo=1, software=SOFTWARE_PRODUCCION, numeracion=NUMERACION_EDSC))
+    firmada = firmar_xml(n.xml, certificado)
+    ar = generar_respuesta(firmada, validada_en=datetime(2026, 10, 2, 8, 10))
+    xml = construir_attached(firmada, ar, consecutivo=11, ahora=datetime(2026, 10, 2, 8, 30), certificado=certificado)
+    xsd = esquema_ubl("AttachedDocument")
+    assert xsd.validate(etree.fromstring(xml)), xsd.error_log
+    XMLVerifier().verify(xml, x509_cert=certificado.cert, expect_references=3)
+    raiz = etree.fromstring(xml)
+    assert raiz.findtext("cbc:ParentDocumentID", namespaces=NS) == "NCE1"
+    uuid = raiz.find("cac:ParentDocumentLineReference/cac:DocumentReference/cbc:UUID", NS)
+    assert (uuid.text, uuid.get("schemeName")) == (n.cufe, "CUDE-SHA384")
+    assert (
+        b"<CreditNote"
+        in raiz.findtext(".//cac:Attachment/cac:ExternalReference/cbc:Description", namespaces=NS).encode()
+    )

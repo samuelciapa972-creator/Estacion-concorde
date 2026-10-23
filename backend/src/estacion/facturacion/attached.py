@@ -136,7 +136,9 @@ def construir_attached(
     _sub(linea, "cbc:LineID", "1")
     documento = _sub(linea, "cac:DocumentReference")
     _sub(documento, "cbc:ID", numero)
-    _sub(documento, "cbc:UUID", cufe, schemeName="CUFE-SHA384")
+    # La factura se identifica con CUFE; la nota crédito, con CUDE.
+    nombre_codigo = "CUDE-SHA384" if etree.QName(factura).localname == "CreditNote" else "CUFE-SHA384"
+    _sub(documento, "cbc:UUID", cufe, schemeName=nombre_codigo)
     _sub(documento, "cbc:IssueDate", fecha_factura)
     _sub(documento, "cbc:DocumentType", "ApplicationResponse")
     _referencia_externa(documento, application_response)

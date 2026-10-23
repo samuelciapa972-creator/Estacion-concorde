@@ -20,6 +20,7 @@ from estacion.facturacion.representacion import (
     valor_en_letras,
 )
 from test_xml_factura import construir, linea, solicitud
+from test_xml_nota import MOTIVO, NUMERACION_EDSC, SOFTWARE_PRODUCCION, nota
 
 CAC = "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
 CBC = "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
@@ -166,3 +167,32 @@ def test_razon_social_larga_se_parte_en_renglones_sin_salirse():
     # Texto dibujado = "(…) Tj". En un solo renglón se montaría sobre el recuadro del número (en los metadatos sí va).
     assert b"(" + larga.encode() + b") Tj" not in pdf
     assert b"SOCIEDAD DE PRUEBA" in pdf and b"EDS DE PRUEBA" in pdf
+
+
+def _nota():
+    """Una nota crédito (sin firmar) que anula EDSC1, hecha como en test_xml_nota."""
+    return nota(construir(consecutivo=1, software=SOFTWARE_PRODUCCION, numeracion=NUMERACION_EDSC))
+
+
+def test_pdf_de_nota_dice_nota_credito_y_la_factura_anulada():
+    n = _nota()
+    d = leer_xml(n.xml)
+    assert (d.tipo, d.factura_referencia, d.motivo) == ("NOTA_CREDITO", "EDSC1", MOTIVO)
+    assert (d.numero, d.cufe, d.resolucion, d.prefijo) == (n.numero, n.cufe, "", "")
+    assert [x.cantidad for x in d.lineas] == [Decimal("1.861")]
+    pdf = _pdf(n.xml)
+    for texto in (rb"NOTA CR\311DITO ELECTR\323NICA", b"EDSC1", b"CUDE", MOTIVO.encode(),
+                  b"Anula la factura EDSC1", b"$ 29.757,00"):  # fmt: skip
+        assert texto in pdf, texto
+    for ausente in (b"CUFE", b"FACTURA ELECTR", b"AUTORIZACI"):
+        assert ausente not in pdf, ausente
+    assert contenido_qr(d).count("CUDE: ") == 1 and "CUFE" not in contenido_qr(d)
+    # La marca depende del ambiente: la nota de producción no la lleva; la de habilitación, sí.
+    assert b"SIN VALIDEZ FISCAL" not in pdf
+    habilitacion = n.xml.replace(b"<cbc:ProfileExecutionID>1<", b"<cbc:ProfileExecutionID>2<")
+    assert b"SIN VALIDEZ FISCAL" in _pdf(habilitacion)
+
+
+def test_pdf_de_factura_sigue_diciendo_factura_y_cufe():
+    pdf = _pdf(construir().xml)
+    assert b"FACTURA ELECTR" in pdf and b"CUFE" in pdf and b"CUDE" not in pdf

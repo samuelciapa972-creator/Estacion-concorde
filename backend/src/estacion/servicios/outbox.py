@@ -506,6 +506,7 @@ def _entregar(
         nombre_zip=guardada.nombre_zip,
         zip=guardada.zip,
         prueba=raiz.findtext("cbc:ProfileExecutionID", namespaces=_NS_LEER) != "1",
+        tipo_documento="nc" if f.tipo == "NOTA_CREDITO" else "fv",
     )
     try:
         recursos.enviador.enviar(mensaje)
