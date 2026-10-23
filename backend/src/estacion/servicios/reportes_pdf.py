@@ -234,7 +234,7 @@ def contador(conn: Conexion, desde: date, hasta: date, ambiente: str, *, comprim
     """Libro de facturas (con notas crédito en negativo) y resumen diario, en horizontal. El CUFE completo va en el
     Excel (aquí no cabe)."""
     facturas = exportacion_contador.facturas(conn, desde, hasta, ambiente)
-    dias = exportacion_contador.resumen_diario(conn, desde, hasta)
+    dias = exportacion_contador.resumen_diario(conn, desde, hasta, ambiente)
     cuerpo: list[Any] = [_nota("<b>Facturas</b> (por fecha de emisión, en todos los estados)"), Spacer(1, 2 * mm)]
     if facturas:
         filas = [

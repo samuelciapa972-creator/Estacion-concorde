@@ -119,30 +119,33 @@ def facturas(conn: Conexion, desde: date, hasta: date, ambiente: str) -> list[Fa
     ]
 
 
-def resumen_diario(conn: Conexion, desde: date, hasta: date) -> list[DiaContable]:
+def resumen_diario(conn: Conexion, desde: date, hasta: date, ambiente: str) -> list[DiaContable]:
     """Lo vendido por día con la misma regla de los reportes (despachos + manuales sin enlace), separando lo que
     tiene factura VALIDADA (FACTURADO) y NO anulada. Una venta manual enlazada se factura por el despacho o por ella
-    misma. La venta manual cuya factura fue anulada con nota FACTURADO no cuenta en ninguna columna."""
+    misma. La venta manual cuya factura fue anulada con nota FACTURADO no cuenta en ninguna columna. Solo cuentan las
+    facturas del `ambiente` (una de habilitación no es "facturada" en un reporte de producción)."""
     filas = conn.execute(
         """WITH ventas AS (
                SELECT d.fecha_operativa AS fecha, d.volumen_bruto AS galones, d.valor,
                       EXISTS (SELECT 1 FROM factura f
-                              WHERE f.estado = 'FACTURADO' AND NOT factura_anulada(f.id)
+                              WHERE f.estado = 'FACTURADO' AND f.ambiente = %s AND NOT factura_anulada(f.id)
                                 AND (f.despacho_id = d.id OR f.venta_manual_id IN (
                                      SELECT v.id FROM venta_manual v WHERE v.despacho_id = d.id))) AS facturada
                FROM despacho d
                UNION ALL
                SELECT v.registrada_en::date, v.volumen, v.valor,
                       EXISTS (SELECT 1 FROM factura f
-                      WHERE f.estado = 'FACTURADO' AND NOT factura_anulada(f.id) AND f.venta_manual_id = v.id)
+                      WHERE f.estado = 'FACTURADO' AND f.ambiente = %s AND NOT factura_anulada(f.id)
+                        AND f.venta_manual_id = v.id)
                FROM venta_manual v
                WHERE v.despacho_id IS NULL
-                 AND NOT EXISTS (SELECT 1 FROM factura f WHERE f.venta_manual_id = v.id AND factura_anulada(f.id)))
+                 AND NOT EXISTS (SELECT 1 FROM factura f
+                                 WHERE f.venta_manual_id = v.id AND f.ambiente = %s AND factura_anulada(f.id)))
            SELECT fecha, count(*), sum(galones), sum(valor),
                   coalesce(sum(valor) FILTER (WHERE facturada), 0), coalesce(sum(valor) FILTER (WHERE NOT facturada), 0)
            FROM ventas WHERE fecha BETWEEN %s AND %s
            GROUP BY fecha ORDER BY fecha""",
-        (desde, hasta),
+        (ambiente, ambiente, ambiente, desde, hasta),
     ).fetchall()
     return [DiaContable(*f) for f in filas]
 
@@ -163,7 +166,7 @@ def excel(conn: Conexion, desde: date, hasta: date, ambiente: str) -> bytes:
         hoja.append(_fila_factura(f))
     resumen = libro.create_sheet("Resumen diario")
     resumen.append(COLUMNAS_RESUMEN)
-    for d in resumen_diario(conn, desde, hasta):
+    for d in resumen_diario(conn, desde, hasta, ambiente):
         resumen.append((d.fecha, d.ventas, d.galones, d.valor_vendido, d.valor_facturado, d.valor_sin_factura))
     for h in (hoja, resumen):
         for celda in h[1]:

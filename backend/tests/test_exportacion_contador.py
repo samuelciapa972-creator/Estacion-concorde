@@ -81,10 +81,10 @@ def test_resumen_no_cuenta_la_venta_anulada(escenario, conn):
     f = _factura(e, anulada, "2026-09-30 11:05")
     otra = e.datos.venta_manual(e.usuario)
     _factura(e, otra, "2026-09-30 11:10", consecutivo=2)
-    sin_nota = exportacion_contador.resumen_diario(conn, date(2026, 9, 1), date(2026, 9, 30))
+    sin_nota = exportacion_contador.resumen_diario(conn, date(2026, 9, 1), date(2026, 9, 30), "2")
     assert [(d.ventas, d.valor_vendido, d.valor_facturado) for d in sin_nota] == [(3, 129757, 100000)]
     _nota(e, f, "2026-09-30 12:00")
-    (dia,) = exportacion_contador.resumen_diario(conn, date(2026, 9, 1), date(2026, 9, 30))
+    (dia,) = exportacion_contador.resumen_diario(conn, date(2026, 9, 1), date(2026, 9, 30), "2")
     assert (dia.ventas, dia.valor_vendido, dia.valor_facturado, dia.valor_sin_factura) == (2, 79757, 50000, 29757)
 
 
@@ -115,3 +115,13 @@ def test_pdf_sin_facturas_no_lleva_el_aviso(escenario, conn):
     pdf = reportes_pdf.contador(conn, date(2026, 9, 1), date(2026, 9, 30), "2", comprimir=False)
     assert b"(Sin facturas en este rango.) Tj" in pdf
     assert b"neto de notas" not in pdf
+
+
+def test_resumen_diario_no_cuenta_facturas_de_otro_ambiente(escenario, conn):
+    e = escenario
+    _factura(e, e.datos.venta_manual(e.usuario), "2026-09-30 10:00", ambiente="2")
+    rango = (date(2026, 9, 1), date(2026, 9, 30))
+    (hab,) = exportacion_contador.resumen_diario(conn, *rango, "2")
+    assert (hab.valor_facturado, hab.valor_sin_factura) == (50000, 0)
+    (prod,) = exportacion_contador.resumen_diario(conn, *rango, "1")  # la venta existe, pero sin factura de producción
+    assert (prod.valor_vendido, prod.valor_facturado, prod.valor_sin_factura) == (50000, 0, 50000)
