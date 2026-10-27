@@ -473,7 +473,7 @@ def _armar_entrega(conn: Conexion, f: _Factura, recursos: Recursos) -> entrega.E
     try:
         p = paquete.armar(
             firmado.encode("utf-8"), respuesta.encode("utf-8"), consecutivo=consecutivo, ahora=ahora,
-            certificado=recursos.certificado, validacion=texto_validacion(respuesta_dian),
+            certificado=recursos.certificado, validacion=texto_validacion(respuesta_dian, respuesta),
         )  # fmt: skip
     except FirmaError as e:  # certificado vencido o inválido: configuración, se reintenta (el mensaje no lleva clave)
         return _NoArmada(f"no se puede firmar el contenedor: {e}", recuperable=True)

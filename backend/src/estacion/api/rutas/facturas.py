@@ -145,16 +145,19 @@ def consultar(factura_id: int, request: Request, conn: Conn, _: SesionActual) ->
 )
 def pdf(factura_id: int, conn: Conn, sesion: SesionActual) -> Response:
     fila = conn.execute(
-        "SELECT numero, estado, coalesce(xml_firmado, xml_sin_firmar), respuesta_dian FROM factura WHERE id = %s",
+        """SELECT numero, estado, coalesce(xml_firmado, xml_sin_firmar), respuesta_dian, application_response
+           FROM factura WHERE id = %s""",
         (factura_id,),
     ).fetchone()
     if fila is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no existe esa factura")
-    numero, estado, xml, respuesta = fila
+    numero, estado, xml, respuesta, application_response = fila
     if estado != "FACTURADO" or not xml:
         raise HTTPException(status.HTTP_409_CONFLICT, f"la factura está {estado}: solo una factura validada tiene PDF")
     try:
-        contenido = generar_pdf(leer_xml(xml.encode("utf-8")), validacion=texto_validacion(respuesta))
+        contenido = generar_pdf(
+            leer_xml(xml.encode("utf-8")), validacion=texto_validacion(respuesta, application_response)
+        )
     except RepresentacionInvalida as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"no se pudo armar el PDF: {e}") from None
     # El PDF lleva datos personales del comprador: queda en la auditoría quién lo descargó (sin esos datos).
@@ -199,17 +202,20 @@ def _placa(conn: Conn, factura_id: int) -> str | None:
 )
 def recibo(factura_id: int, conn: Conn, sesion: SesionActual) -> Response:
     fila = conn.execute(
-        "SELECT numero, estado, coalesce(xml_firmado, xml_sin_firmar), respuesta_dian FROM factura WHERE id = %s",
+        """SELECT numero, estado, coalesce(xml_firmado, xml_sin_firmar), respuesta_dian, application_response
+           FROM factura WHERE id = %s""",
         (factura_id,),
     ).fetchone()
     if fila is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no existe esa factura")
-    numero, estado, xml, respuesta = fila
+    numero, estado, xml, respuesta, application_response = fila
     if estado != "FACTURADO" or not xml:
         raise HTTPException(status.HTTP_409_CONFLICT, f"la factura está {estado}: solo se imprime una validada")
     try:
         contenido = generar_recibo(
-            leer_xml(xml.encode("utf-8")), placa=_placa(conn, factura_id), validacion=texto_validacion(respuesta)
+            leer_xml(xml.encode("utf-8")),
+            placa=_placa(conn, factura_id),
+            validacion=texto_validacion(respuesta, application_response),
         )
     except RepresentacionInvalida as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"no se pudo armar el recibo: {e}") from None

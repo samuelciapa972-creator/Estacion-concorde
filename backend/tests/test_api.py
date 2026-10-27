@@ -384,6 +384,19 @@ def test_texto_de_validacion_nunca_inventa_una_fecha(respuesta, texto):
     assert texto_validacion(respuesta) == texto
 
 
+def test_la_fecha_de_validacion_sale_del_application_response_de_la_dian():
+    from estacion.api.rutas.facturas import texto_validacion
+
+    ar = (
+        '<ApplicationResponse xmlns="urn:oasis:names:specification:ubl:schema:xsd:ApplicationResponse-2" '
+        'xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
+        "<cbc:IssueDate>2026-10-27</cbc:IssueDate><cbc:IssueTime>18:25:24-05:00</cbc:IssueTime></ApplicationResponse>"
+    )
+    assert texto_validacion({"modo": "normal", "codigo_dian": "00"}, ar) == "27/10/2026 18:25:24"
+    assert texto_validacion({"simulado": True}, ar).startswith("SIMULADA")  # el simulado nunca parece real
+    assert texto_validacion({}, "<roto") == "SIN DATO DE VALIDACIÓN"
+
+
 def test_otra_clave_para_una_venta_en_proceso(api):
     despacho = api.e.datos.despacho()
     pedir_factura(api, despacho)

@@ -222,12 +222,33 @@ def identificacion_comprador(d: DatosRepresentacion) -> str:
     return f"{d.comprador_tipo} {d.comprador_documento}{dv}"
 
 
-def texto_validacion(respuesta: dict[str, object] | None) -> str:
-    """Lo que el PDF dice de la validación. Con el proveedor simulado, lo dice claramente; nunca inventa una fecha."""
+def texto_validacion(respuesta: dict[str, object] | None, application_response: str | bytes | None = None) -> str:
+    """Lo que el PDF dice de la validación. Con el proveedor simulado, lo dice claramente; nunca inventa una fecha.
+
+    La fecha es la del ApplicationResponse que devolvió la DIAN (`cbc:IssueDate` + `cbc:IssueTime`): el momento en
+    que validó el documento."""
     if respuesta and respuesta.get("simulado"):
         return "SIMULADA (banco de pruebas): no se envió a la DIAN"
     fecha = (respuesta or {}).get("fecha_validacion")
-    return str(fecha) if fecha else "SIN DATO DE VALIDACIÓN"
+    if fecha:
+        return str(fecha)
+    return _fecha_application_response(application_response) or "SIN DATO DE VALIDACIÓN"
+
+
+def _fecha_application_response(xml: str | bytes | None) -> str | None:
+    if not xml:
+        return None
+    try:
+        raiz = etree.fromstring(
+            xml.encode("utf-8") if isinstance(xml, str) else xml,
+            parser=etree.XMLParser(resolve_entities=False, no_network=True),
+        )
+    except etree.XMLSyntaxError:
+        return None
+    dia, hora = raiz.find("cbc:IssueDate", _NS), raiz.find("cbc:IssueTime", _NS)
+    if dia is None or not dia.text or hora is None or not hora.text:
+        return None
+    return f"{fecha_co(dia.text.strip())} {hora.text.strip()[:8]}"
 
 
 _ETIQUETA_CODIGO = {"FACTURA": "CUFE", "NOTA_CREDITO": "CUDE"}
