@@ -124,11 +124,13 @@ Qué hacer:
 La clave técnica del rango EDSC la tiene la DIAN. No se copia del portal a mano: el comando `guardar-clave-tecnica` la consulta con
 `GetNumberingRange` (producción) y la escribe en un archivo nuevo, sin mostrarla.
 
-1. Elegir una ruta nueva fuera del repositorio, p. ej. `~/clave-edsc.env` (si existe, el comando se niega).
-2. `make guardar-clave-tecnica PREFIJO=EDSC ARCHIVO=~/clave-edsc.env`
+1. Elegir una ruta nueva fuera del repositorio, p. ej. `$HOME/clave-edsc.env` (si existe, el comando se niega).
+   Escribir `$HOME`, no `~`: en `ARCHIVO=~/...` zsh no expande la tilde y el archivo acabaría en una carpeta llamada `~`.
+2. `make guardar-clave-tecnica PREFIJO=EDSC ARCHIVO=$HOME/clave-edsc.env`
    Exige `DIAN_AMBIENTE=1`. Crea el archivo con permisos 0600 y una sola línea `DIAN_CLAVE_TECNICA=<valor>`. Solo dice dónde la escribió.
-   Se niega si el archivo ya existe, si la DIAN no tiene ese prefijo o si no devuelve clave.
-3. Copiar esa línea al `.env` y **borrar el archivo** (`rm ~/clave-edsc.env`).
+   Se niega si el archivo ya existe, si la ruta (resueltos los enlaces) queda dentro del repositorio, si la DIAN no tiene ese
+   prefijo o si no devuelve clave. Si la escritura falla a medias, borra el archivo y lo dice.
+3. Copiar esa línea al `.env` y **borrar el archivo** (`rm $HOME/clave-edsc.env`).
 4. Correr `make configurar-produccion PREFIJO=EDSC`. Vuelve a consultar la DIAN y compara con `DIAN_CLAVE_TECNICA`; si no coincide, no activa nada
    y lo dice, sin imprimir ninguna de las dos claves.
 

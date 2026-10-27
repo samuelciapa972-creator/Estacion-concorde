@@ -19,6 +19,7 @@ Lee DATABASE_URL, DIAN_* y el certificado del entorno. Nunca imprime el PIN, la 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hmac
 import os
 import re
@@ -27,6 +28,7 @@ import uuid
 from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -61,6 +63,15 @@ def _misma_clave(a: str, b: str) -> bool:
     """Comparación en tiempo constante de dos claves técnicas; vacía nunca coincide. Sobre bytes: con str,
     `compare_digest` lanza TypeError si alguna lleva caracteres no ASCII."""
     return bool(a) and bool(b) and hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+
+
+def _raiz_del_repositorio() -> Path | None:
+    """La carpeta que contiene `backend/` (con su pyproject.toml) por encima de este archivo, o None si el paquete
+    está instalado fuera del repositorio (p. ej. en la imagen de Docker)."""
+    for carpeta in Path(__file__).resolve().parents:
+        if (carpeta / "backend" / "pyproject.toml").is_file():
+            return carpeta
+    return None
 
 
 def _err(texto: str) -> None:
@@ -300,6 +311,11 @@ def _guardar_clave_tecnica(
     if os.path.lexists(archivo):
         _err("el archivo ya existe: no se sobrescribe nada (indique uno nuevo)")
         return 1
+    raiz = _raiz_del_repositorio()
+    # realpath resuelve los enlaces de las carpetas: un enlace fuera del repositorio que apunte a él tampoco sirve.
+    if raiz is not None and Path(os.path.realpath(archivo)).is_relative_to(raiz):
+        _err("la ruta queda dentro del repositorio: la clave no puede caer en el árbol versionado (use p. ej. $HOME)")
+        return 1
     r, motivo = _consultar_rangos(entorno, nit, cliente_dian)
     if r is None:
         _err(motivo)
@@ -316,8 +332,14 @@ def _guardar_clave_tecnica(
     except OSError as e:
         _err(f"no se pudo crear el archivo ({e.strerror})")
         return 1
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(f"DIAN_CLAVE_TECNICA={rango.clave_tecnica}\n")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(f"DIAN_CLAVE_TECNICA={rango.clave_tecnica}\n")
+    except (OSError, ValueError) as e:  # disco lleno, cuota...: no se deja media clave en el disco
+        with contextlib.suppress(OSError):
+            os.unlink(archivo)
+        _err(f"no se pudo escribir el archivo ({getattr(e, 'strerror', None) or type(e).__name__}); se borró")
+        return 1
     print(
         f"Clave técnica del rango {prefijo} escrita en {archivo} (no se muestra). "
         "Copie esa línea al .env y después BORRE el archivo."

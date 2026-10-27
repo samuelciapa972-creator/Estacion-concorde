@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+# Archivos de clave como los de `guardar-clave-tecnica` (clave-edsc.env); `.env.example` no termina en .env
+*.env
 *.pem
 *.p12
 *.pfx

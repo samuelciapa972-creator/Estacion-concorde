@@ -438,3 +438,63 @@ def test_verificar_produccion_numeracion_distinta_de_la_dian(escenario, tmp_path
     codigo, salida = verificar(escenario, tmp_path, capsys, dian=dian_produccion(**cambio))
     assert codigo != 0
     assert "✘ la numeración EDSC activa (resolución 18764000000001, 1-1000000) no es la de la DIAN" in salida
+
+
+def _guardar(escenario, tmp_path, ruta, dian=None):
+    e = entorno_produccion(escenario, tmp_path, DIAN_CLAVE_TECNICA="")
+    return habilitacion.main(["guardar-clave-tecnica", "--prefijo", "EDSC", "--archivo", str(ruta)], entorno=e,
+                             cliente_dian=dian or dian_produccion())  # fmt: skip
+
+
+def test_guardar_clave_tecnica_se_niega_dentro_del_repositorio(escenario, tmp_path, capsys):
+    raiz = habilitacion._raiz_del_repositorio()
+    assert raiz is not None and (raiz / "backend").is_dir()
+    ruta = raiz / "backend" / f"clave-{uuid.uuid4().hex[:8]}.env"
+    dian = dian_produccion()
+    assert _guardar(escenario, tmp_path, ruta, dian) == 1
+    assert not ruta.exists() and dian.llamadas == []  # ni consulta a la DIAN
+    captura = capsys.readouterr()
+    assert "dentro del repositorio" in captura.err and CLAVE_TECNICA not in captura.out + captura.err
+
+
+def test_guardar_clave_tecnica_se_niega_si_un_enlace_lleva_al_repositorio(escenario, tmp_path, capsys):
+    raiz = habilitacion._raiz_del_repositorio()
+    enlace = tmp_path / "enlace"
+    enlace.symlink_to(raiz / "backend", target_is_directory=True)
+    nombre = f"clave-{uuid.uuid4().hex[:8]}.env"
+    assert _guardar(escenario, tmp_path, enlace / nombre) == 1
+    assert not (raiz / "backend" / nombre).exists()
+    assert "dentro del repositorio" in capsys.readouterr().err
+    # Un enlace roto en la ruta pedida tampoco se sigue: ya "existe".
+    colgante = tmp_path / "colgante.env"
+    colgante.symlink_to(raiz / "backend" / nombre)
+    assert _guardar(escenario, tmp_path, colgante) == 1
+    assert not (raiz / "backend" / nombre).exists()
+
+
+def test_guardar_clave_tecnica_fallo_al_escribir_borra_el_archivo(escenario, tmp_path, capsys, monkeypatch):
+    import errno
+
+    real = habilitacion.os.fdopen
+
+    class Llena:  # el disco se llena a mitad de la línea
+        def __init__(self, f):
+            self.f = f
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            self.f.close()
+
+        def write(self, texto):
+            self.f.write(texto[:22])
+            self.f.flush()
+            raise OSError(errno.ENOSPC, "No queda espacio en el dispositivo")
+
+    monkeypatch.setattr(habilitacion.os, "fdopen", lambda *a, **k: Llena(real(*a, **k)))
+    ruta = tmp_path / "clave.env"
+    assert _guardar(escenario, tmp_path, ruta) == 1
+    assert not ruta.exists()  # no queda media clave en el disco
+    captura = capsys.readouterr()
+    assert "no se pudo escribir" in captura.err and CLAVE_TECNICA not in captura.out + captura.err
