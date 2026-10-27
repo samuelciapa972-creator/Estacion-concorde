@@ -2,11 +2,12 @@
 #   db      PostgreSQL 16
 #   migrar  aplica las migraciones (alembic upgrade head) y termina; la API y el worker esperan a que acabe
 #   api     FastAPI (no se publica: solo la ve Caddy)
-#   worker  cola de envíos con el proveedor SIMULADO (nada sale a la DIAN): firma, y entrega el ZIP por correo.
-#           Solo habilitación: con DIAN_AMBIENTE=1 no arranca (detenerlo antes de `make worker-dian`)
+#   worker  (perfil "simulador") cola de envíos con el proveedor SIMULADO (nada sale a la DIAN). Va en el perfil para
+#           que `make stack` nunca lo arranque junto al worker real (`make worker-dian`, fuera de Docker): dos workers
+#           de la misma cola se quitarían los trabajos. Con DIAN_AMBIENTE=1 no arranca.
 #   mailpit buzón de PRUEBA: recibe los correos de las facturas (web en http://localhost:8025). Nada sale a internet
 #   web     Caddy: HTTPS local, la PWA y /api -> api
-#   simulador (perfil "simulador"): un despacho cada 20 s. `make stack-simulador`
+#   simulador (perfil "simulador"): un despacho cada 20 s. `make stack-simulador` arranca este y el worker simulado
 # Variables: .env en la raíz del repositorio (ver .env.example). Sin JWT_SECRETO la API NO arranca, a propósito.
 # Nombre propio del proyecto: no reutiliza el volumen `estacion_pgdata` de versiones anteriores.
 name: estacion-banco
@@ -73,6 +74,7 @@ services:
 
   worker:
     <<: *backend
+    profiles: ["simulador"]
     command: ["python", "-m", "estacion.worker", "--proveedor", "simulado"]
     environment:
       <<: *entorno-backend

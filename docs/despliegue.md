@@ -5,14 +5,14 @@
 
 ## 1. Qué se levanta
 
-`make stack` (o `make stack-simulador` para tener además el surtidor simulado) usa `infra/docker-compose.yml`:
+`make stack` (o `make stack-simulador` para tener además el worker y el surtidor simulados) usa `infra/docker-compose.yml`:
 
 | Servicio | Qué hace | Expuesto |
 |---|---|---|
 | `db` | PostgreSQL 16, volumen `pgdata` | solo `127.0.0.1:5432` (pruebas y `make api`) |
 | `migrar` | `alembic upgrade head` y termina; `api` y `worker` esperan a que acabe | no |
 | `api` | FastAPI | no: solo la ve Caddy |
-| `worker` | cola de envíos con el proveedor **simulado** | no |
+| `worker` | (perfil `simulador`) cola de envíos con el proveedor **simulado**. Con DIAN real no se usa: las facturas las envía `make worker-dian` fuera de Docker, y dos workers de la misma cola se quitarían los trabajos | no |
 | `web` | Caddy: HTTPS, la PWA y `/api` → `api` en el mismo origen | puertos 80 y 443 |
 | `simulador` | (perfil `simulador`) un despacho cada 20 s | no |
 
@@ -30,7 +30,7 @@
    make stack-usuario U=admin1 N="Admin Uno" R=ADMIN
    make stack-usuario U=bombero1 N="Bombero Uno" R=BOMBERO
    ```
-4. `make stack-logs` para ver que `migrar` terminó bien y que `api`, `worker` y `web` están sanos.
+4. `make stack-logs` para ver que `migrar` terminó bien y que `api` y `web` están sanos (y `worker` con `make stack-simulador`).
 
 `make stack-down` detiene todo y conserva los datos. `make db-reset` **borra** la base de desarrollo (solo el
 volumen de PostgreSQL; la CA de Caddy se conserva).

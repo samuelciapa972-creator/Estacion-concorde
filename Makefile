@@ -24,15 +24,18 @@
 #   make tipos         regenera Frontend/openapi.json (contrato de la API; lo verifica test_openapi)
 #
 # Todo en contenedores (como quedaría en el servidor de la estación; necesita JWT_SECRETO en .env):
-#   make stack            db + migraciones + api + worker + web (Caddy, HTTPS local) en https://localhost
-#   make stack-simulador  lo mismo y además el surtidor simulado
+#   make stack            db + migraciones + api + web (Caddy, HTTPS local) en https://localhost; las facturas
+#                         las envía `make worker-dian` (fuera de Docker)
+#   make stack-simulador  lo mismo y además el worker SIMULADO y el surtidor simulado (banco de pruebas)
 #   make stack-logs       registros de todos los servicios;  make stack-down: detiene todo (conserva los datos)
 #   make stack-usuario U=bombero1 N="Bombero Uno" R=BOMBERO   crea un usuario (pide el PIN)
 #   make ca               copia el certificado raíz de Caddy a infra/caddy-root.crt (para instalar en la tablet)
 
 BACK    := backend
 WEB     := Frontend
-VENV    ?= .venv
+# backend/.venv; si no ejecuta (p. ej. copiado desde Windows), ~/venvs/estacion (`uv venv -p 3.12 ~/venvs/estacion`
+# y `VIRTUAL_ENV=~/venvs/estacion uv pip install -e backend`).
+VENV    ?= $(if $(shell test -x $(BACK)/.venv/bin/python && echo si),.venv,$(HOME)/venvs/estacion)
 # Rutas relativas a backend/: las recetas de Python corren con `cd backend`.
 PY      := $(VENV)/bin/python
 COMPOSE := docker compose --project-directory . -f infra/docker-compose.yml

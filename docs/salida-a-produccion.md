@@ -19,6 +19,12 @@ Falta (lo que cubre esta guía): configurar el sistema, verificarlo y emitir la 
 
 ## 2. Antes del día de salida
 
+> **Resultado de las pruebas del 2026-10-27 (habilitación, modo normal):** la DIAN aceptó ("Procesado Correctamente",
+> código 00) facturas a un NIT de contado con tarjeta (SETP990000001, SETP990000003), a crédito (SETP990000002) y las
+> notas crédito NCP1 y NCP2; los correos con el ZIP salieron. Con `DIAN_TEST_SET_ID` **con valor** la DIAN rechaza todo
+> con "Set de prueba ... se encuentra Aceptado" (el set ya pasó): para seguir probando en habilitación, dejarlo **vacío**
+> en el `.env`. Un rechazo así no gasta el número: la venta vuelve a pendiente y se reemite con el mismo consecutivo.
+
 ### 2.1 Prueba previa de una nota crédito en habilitación
 
 Se hace con `DIAN_AMBIENTE=2` (el `.env` actual). Sirve para despejar tres dudas que el código no puede resolver solo
@@ -33,7 +39,7 @@ Se hace con `DIAN_AMBIENTE=2` (el `.env` actual). Sirve para despejar tres dudas
 Comandos (desde la raíz del repo; cargan el `.env`):
 
 ```bash
-hab() { (cd backend && set -a && . ../.env && set +a && .venv/bin/python -m estacion.habilitacion "$@"); }
+hab() { (cd backend && set -a && . ../.env && set +a && ~/venvs/estacion/bin/python -m estacion.habilitacion "$@"); }
 ```
 
 Pasos:
@@ -142,12 +148,13 @@ también sirve poner la ruta del PNG en `RECIBO_LOGO` y reiniciar la API.
    Imprime una lista con ✔/✘ y sale con 0 solo si todo está ✔. No envía documentos. Revisa: variables DIAN, `DIAN_TEST_SET_ID` vacío,
    certificado vigente y no de prueba, una numeración activa del ambiente 1 (EDSC) y vigente, `GetNumberingRange` y prefijo, SMTP y cola sin documentos de habilitación.
    Si algo sale ✘, corregirlo y repetir. No seguir hasta que todo esté en ✔.
-7. **Detener antes el worker simulado** del stack (`docker compose --project-directory . -f infra/docker-compose.yml stop worker`)
-   y cualquier `make worker` que siga abierto. Por qué: varios workers toman trabajos de la misma cola, y uno de habilitación
-   tomaría trabajos de producción. Ya no los entrega (los deja FALLIDO con `AMBIENTE_NO_COINCIDE` y habría que reenviarlos a
-   mano), y con `DIAN_AMBIENTE=1` el worker simulado ni arranca (el del stack queda reiniciándose con ese error). Comprobar con
-   `docker compose --project-directory . -f infra/docker-compose.yml ps worker` que no está corriendo.
-8. Arrancar el worker contra producción: `make worker-dian` (es `python -m estacion.worker --proveedor dian`). En el registro debe aparecer
+7. Comprobar que **no corre ningún worker simulado**: `make stack` ya no lo arranca (va en el perfil `simulador`), pero si
+   se usó `make stack-simulador` o quedó un `make worker` abierto, detenerlos
+   (`docker compose --project-directory . -f infra/docker-compose.yml stop worker simulador`). Por qué: varios workers
+   toman trabajos de la misma cola, y uno de habilitación tomaría trabajos de producción. Comprobar con
+   `docker compose --project-directory . -f infra/docker-compose.yml ps` que `worker` no aparece.
+8. Arrancar el worker contra producción: `make worker-dian` (es `python -m estacion.worker --proveedor dian`; si
+   `backend/.venv` no ejecuta, el Makefile usa `~/venvs/estacion`). En el registro debe aparecer
    "proveedor DIAN, ambiente de PRODUCCIÓN". El proveedor simulado no arranca con `DIAN_AMBIENTE=1`, y ningún worker arranca sin
    `DIAN_AMBIENTE` válido.
 9. Emitir **una factura real de verificación** (venta real, cliente real). Confirmar:
