@@ -11,3 +11,12 @@ export function etiquetaDocumento(f) {
 export function puedeAnular(f, usuario) {
   return usuario?.rol === 'ADMIN' && f.anulable === true;
 }
+
+/** Advertencia del diálogo: la factura sigue vigente hasta que la DIAN acepte la nota. */
+export const ADVERTENCIA_ANULAR =
+  'La nota crédito se envía a la DIAN. Registre la venta nueva con los datos correctos solo cuando la DIAN acepte la nota: si la rechaza, la factura sigue vigente.';
+
+/** Aviso tras anular: la nota salió, pero la factura aún no está anulada (eso lo decide la DIAN). */
+export function avisoNotaEnviada(nota) {
+  return `Nota crédito ${nota.numero} enviada; la factura queda anulada cuando la DIAN la acepte. Registre la venta nueva solo después.`;
+}

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { api, usuarioActual } from '../services/api';
 import { guardarArchivo } from '../lib/descarga';
 import { fechaHora, pesos, rangoHastaHoy } from '../lib/formato';
-import { etiquetaDocumento, puedeAnular } from '../lib/anulacion';
+import { avisoNotaEnviada, etiquetaDocumento, puedeAnular } from '../lib/anulacion';
 import { useCarga } from '../lib/useCarga';
 import { Boton, Celda, Encabezado, Etiqueta, ErrorApi, Mensaje, Paginador, Segmentado, Tabla, Vacio, Cargando } from '../components/ui';
 import { COLOR, estilos } from '../components/estilos';
@@ -45,7 +45,7 @@ export default function Facturacion() {
   // Tras anular, la fila pierde su botón: el foco pasa al aviso para no perderse.
   const anulada = async (nota) => {
     setAAnular(null);
-    setAviso(`Factura anulada con la nota crédito ${nota.numero}.`);
+    setAviso(avisoNotaEnviada(nota));
     await recargar();
     avisoRef.current?.focus();
   };

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
+import { ADVERTENCIA_ANULAR } from '../lib/anulacion';
 import { nuevaClave } from '../lib/clave';
 import { Boton, Campo, ErrorApi } from './ui';
 import { estilos } from './estilos';
@@ -56,7 +57,7 @@ export default function DialogoAnular({ factura, onCerrar, onAnulada }) {
       <form onSubmit={anular} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <h2 id="anular_titulo" style={{ ...estilos.titulo, overflowWrap: 'anywhere' }}>Anular la factura {factura.numero}</h2>
         <p style={{ fontSize: '12px', margin: 0 }}>
-          La factura quedará anulada ante la DIAN. La venta no se podrá volver a facturar: registre una venta nueva con los datos correctos.
+          {ADVERTENCIA_ANULAR}
         </p>
         <ErrorApi error={error} />
         <Campo etiqueta="Motivo de la anulación" id="anular_motivo" ayuda={`${motivo.length} de ${MAX_MOTIVO} caracteres`}>

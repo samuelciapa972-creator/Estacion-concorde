@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { etiquetaDocumento, puedeAnular } from "./anulacion.js";
+import { ADVERTENCIA_ANULAR, avisoNotaEnviada, etiquetaDocumento, puedeAnular } from "./anulacion.js";
 
 describe("etiqueta del documento", () => {
   it("la nota crédito dice qué factura anula", () => {
@@ -23,5 +23,19 @@ describe("quién puede anular", () => {
   it("y solo si la factura es anulable", () => {
     expect(puedeAnular({ anulable: false }, { rol: "ADMIN" })).toBe(false);
     expect(puedeAnular({}, { rol: "ADMIN" })).toBe(false);
+  });
+});
+
+describe("textos de la anulación", () => {
+  // La factura NO queda anulada al enviar la nota: solo cuando la DIAN la acepta (si la rechaza, sigue vigente).
+  it("el aviso tras anular no da la factura por anulada", () => {
+    expect(avisoNotaEnviada({ numero: "NCE1" })).toBe(
+      "Nota crédito NCE1 enviada; la factura queda anulada cuando la DIAN la acepte. Registre la venta nueva solo después."
+    );
+  });
+  it("la advertencia del diálogo dice que la venta nueva espera a la DIAN", () => {
+    expect(ADVERTENCIA_ANULAR).toMatch(/solo cuando la DIAN acepte la nota/);
+    expect(ADVERTENCIA_ANULAR).toMatch(/si la rechaza, la factura sigue vigente/);
+    expect(ADVERTENCIA_ANULAR).not.toMatch(/quedará anulada/);
   });
 });
