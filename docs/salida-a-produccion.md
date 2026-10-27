@@ -21,11 +21,14 @@ Falta (lo que cubre esta guía): configurar el sistema, verificarlo y emitir la 
 
 ### 2.1 Prueba previa de una nota crédito en habilitación
 
-Se hace con `DIAN_AMBIENTE=2` (el `.env` actual). Sirve para despejar tres dudas que el código no puede resolver solo:
+Se hace con `DIAN_AMBIENTE=2` (el `.env` actual). Sirve para despejar tres dudas que el código no puede resolver solo
+(las dos primeras las responde la DIAN; la tercera, no):
 
 1. Si la DIAN acepta la nota. Si exige habilitar las notas aparte, se sabrá aquí y no en producción.
 2. El prefijo en `CorporateRegistrationScheme/ID` de la nota (hoy NCP en habilitación, NCE en producción): confirmar que la DIAN lo acepta.
-3. El `ProfileID` / `DocumentType` del `AttachedDocument` de la nota: confirmar que la DIAN y el correo del cliente lo aceptan.
+3. El `ProfileID` / `DocumentType` del `AttachedDocument` de la nota. El `AttachedDocument` **no se envía a la DIAN**: va solo
+   en el ZIP del correo, así que la habilitación no lo confirma. Se valida únicamente con lo que recibe el cliente: abrir el ZIP
+   del correo de la nota (Mailpit o el buzón de prueba) y comprobar que el XML y el PDF se abren y corresponden a la nota.
 
 Comandos (desde la raíz del repo; cargan el `.env`):
 
