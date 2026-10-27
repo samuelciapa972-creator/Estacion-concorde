@@ -3215,6 +3215,69 @@
         ]
       }
     },
+    "/facturas/{factura_id}/recibo": {
+      "get": {
+        "operationId": "recibo_facturas__factura_id__recibo_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "factura_id",
+            "required": true,
+            "schema": {
+              "title": "Factura Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {}
+            },
+            "description": "comandos ESC/POS (impresora de 58 mm)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "la factura todavía no está validada"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "el XML no permite armar el recibo"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Recibo para la impresora térmica (ESC/POS), armado desde el XML como el PDF",
+        "tags": [
+          "facturas"
+        ]
+      }
+    },
     "/facturas/{factura_id}/reenviar": {
       "post": {
         "operationId": "reenviar_facturas__factura_id__reenviar_post",

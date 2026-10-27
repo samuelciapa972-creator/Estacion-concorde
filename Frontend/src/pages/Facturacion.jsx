@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { api, usuarioActual } from '../services/api';
 import { guardarArchivo } from '../lib/descarga';
+import { imprimir } from '../lib/impresion';
 import { fechaHora, pesos, rangoHastaHoy } from '../lib/formato';
 import { avisoNotaEnviada, etiquetaDocumento, puedeAnular } from '../lib/anulacion';
 import { useCarga } from '../lib/useCarga';
@@ -37,6 +38,17 @@ export default function Facturacion() {
     try {
       guardarArchivo(await api.facturaPdf(f.id), `factura_${f.numero}.pdf`);
       setDescarga({ id: null, error: null });
+    } catch (err) {
+      setDescarga({ id: null, error: err });
+    }
+  };
+
+  const recibo = async (f) => {
+    setDescarga({ id: `r${f.id}`, error: null });
+    try {
+      const camino = await imprimir(await api.facturaRecibo(f.id));
+      setDescarga({ id: null, error: null });
+      if (camino === 'rawbt') setAviso(`Recibo de ${f.numero} enviado a RawBT.`);
     } catch (err) {
       setDescarga({ id: null, error: err });
     }
@@ -108,6 +120,11 @@ export default function Facturacion() {
                 {f.estado === 'FACTURADO' && (
                   <Boton variante="chico" onClick={() => pdf(f)} disabled={descarga.id === f.id} aria-label={`Descargar PDF de ${f.numero}`}>
                     {descarga.id === f.id ? '...' : 'PDF'}
+                  </Boton>
+                )}
+                {f.estado === 'FACTURADO' && (
+                  <Boton variante="chico" onClick={() => recibo(f)} disabled={descarga.id === `r${f.id}`} aria-label={`Imprimir el recibo de ${f.numero}`} style={{ marginLeft: '6px' }}>
+                    {descarga.id === `r${f.id}` ? '...' : 'Recibo'}
                   </Boton>
                 )}
                 {puedeAnular(f, usuario) && (

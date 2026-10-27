@@ -137,6 +137,7 @@ export const api = {
   emitir: (f) => json("POST", "/facturas", f),
   factura: (id) => json("GET", `/facturas/${id}`),
   facturaPdf: (id) => archivo(`/facturas/${id}/pdf`),
+  facturaRecibo: async (id) => new Uint8Array(await (await pedir("GET", `/facturas/${id}/recibo`)).arrayBuffer()),
   anular: (id, { clave, motivo }) => json("POST", `/facturas/${id}/anular`, { clave, motivo }),
 
   // público (registro por QR)

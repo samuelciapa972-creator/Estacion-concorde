@@ -340,6 +340,30 @@ def test_pdf_solo_de_facturas_validadas_y_queda_en_la_auditoria(api, recursos):
     assert auditoria == [(str(f["id"]), {})]
 
 
+def test_recibo_termico_de_una_empresa_con_su_placa_y_queda_en_la_auditoria(api, recursos):
+    cliente = api.post("/clientes", empresa(), api.bombero).json()
+    despacho = api.e.datos.despacho()
+    api.e.datos.conn.execute(
+        "UPDATE despacho SET placa_raw = 'gzy858', placa_tipo = 'PLACA' WHERE id = %s", (despacho,)
+    )
+    f = pedir_factura(api, despacho, cliente_id=cliente["id"]).json()
+    assert api.get(f"/facturas/{f['id']}/recibo", api.bombero).status_code == 409  # todavía EN_PROCESO
+
+    procesar_pendientes(api.e.datos.conn, ProveedorSimulado(), recursos=recursos)
+    r = api.get(f"/facturas/{f['id']}/recibo", api.bombero)
+    assert r.status_code == 200 and r.headers["content-type"] == "application/octet-stream"
+    assert r.headers["cache-control"] == "no-store"
+    assert r.content.startswith(b"\x1b@") and b"TRANSPORTES DE PRUEBA S.A.S.\n" in r.content
+    assert b"NIT 900.123.456-8\n" in r.content and b"Placa: GZY858\n" in r.content
+    auditoria = api.e.datos.conn.execute("SELECT entidad_id FROM auditoria WHERE accion = 'FACTURA_RECIBO'").fetchall()
+    assert auditoria == [(str(f["id"]),)]
+
+
+def test_recibo_exige_sesion_y_factura_existente(api):
+    assert api.get("/facturas/1/recibo").status_code == 401
+    assert api.get("/facturas/999999/recibo", api.bombero).status_code == 404
+
+
 def test_pdf_exige_sesion_y_factura_existente(api):
     assert api.get("/facturas/1/pdf").status_code == 401
     assert api.get("/facturas/999999/pdf", api.bombero).status_code == 404
@@ -370,7 +394,6 @@ def test_otra_clave_para_una_venta_en_proceso(api):
 @pytest.mark.parametrize(
     ("cambios", "codigo", "texto"),
     [
-        ({"medio_pago": "TARJETA"}, 422, "caso todavía no soportado"),
         ({"clave": "corta"}, 422, "clave"),
         ({"cliente_id": 999_999}, 422, "no existe"),
         ({"origen_id": 999_999}, 409, "no existe"),
@@ -382,10 +405,13 @@ def test_factura_rechazada_antes_de_numerar(api, cambios, codigo, texto):
     assert api.e.siguiente() == 1
 
 
-def test_comprador_con_nit_todavia_no_se_factura(api):
+def test_factura_a_una_empresa_con_tarjeta_llega_a_facturado(api, recursos):
     cliente = api.post("/clientes", empresa(), api.bombero).json()
-    r = pedir_factura(api, api.e.datos.despacho(), cliente_id=cliente["id"])
-    assert r.status_code == 422 and "todavía no soportado" in r.json()["detail"]
+    r = pedir_factura(api, api.e.datos.despacho(), cliente_id=cliente["id"], medio_pago="TARJETA")
+    assert r.status_code == 201 and r.json()["cliente"]["nombre_mostrar"] == "TRANSPORTES DE PRUEBA S.A.S."
+    procesar_pendientes(api.e.datos.conn, ProveedorSimulado(), recursos=recursos)
+    f = api.get(f"/facturas/{r.json()['id']}", api.bombero).json()
+    assert (f["estado"], f["medio_pago"]) == ("FACTURADO", "TARJETA")
 
 
 def test_sin_configuracion_dian_no_se_emite(armar):

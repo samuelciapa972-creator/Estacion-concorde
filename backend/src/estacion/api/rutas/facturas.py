@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from psycopg import errors
 
 from ...facturacion.modelos import EstadoEntrega, TipoTrabajo
+from ...facturacion.recibo import generar_recibo
 from ...facturacion.representacion import RepresentacionInvalida, generar_pdf, leer_xml, texto_validacion
 from ...servicios import clientes, entrega
 from ...servicios._bd import auditar, encolar, exigir_autocommit
@@ -163,6 +164,62 @@ def pdf(factura_id: int, conn: Conn, sesion: SesionActual) -> Response:
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'inline; filename="factura_{numero}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+def _placa(conn: Conn, factura_id: int) -> str | None:
+    """La placa del despacho, tal como la digitó el operador. Una nota la toma de la factura que anula; una venta
+    manual solo la tiene si ya se cruzó con su despacho."""
+    fila = conn.execute(
+        """SELECT d.placa_raw, d.placa_tipo
+           FROM factura f
+           LEFT JOIN factura r ON r.id = f.referencia_id
+           LEFT JOIN venta_manual v ON v.id = coalesce(f.venta_manual_id, r.venta_manual_id)
+           JOIN despacho d ON d.id = coalesce(f.despacho_id, r.despacho_id, v.despacho_id)
+           WHERE f.id = %s""",
+        (factura_id,),
+    ).fetchone()
+    if fila is None or fila[1] == "SIN_PLACA" or not fila[0].strip():
+        return None
+    return str(fila[0]).strip().upper()
+
+
+@router.get(
+    "/{factura_id}/recibo",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/octet-stream": {}}, "description": "comandos ESC/POS (impresora de 58 mm)"},
+        404: {"model": Error},
+        409: {"model": Error, "description": "la factura todavía no está validada"},
+        422: {"model": Error, "description": "el XML no permite armar el recibo"},
+    },
+    summary="Recibo para la impresora térmica (ESC/POS), armado desde el XML como el PDF",
+)
+def recibo(factura_id: int, conn: Conn, sesion: SesionActual) -> Response:
+    fila = conn.execute(
+        "SELECT numero, estado, coalesce(xml_firmado, xml_sin_firmar), respuesta_dian FROM factura WHERE id = %s",
+        (factura_id,),
+    ).fetchone()
+    if fila is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no existe esa factura")
+    numero, estado, xml, respuesta = fila
+    if estado != "FACTURADO" or not xml:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"la factura está {estado}: solo se imprime una validada")
+    try:
+        contenido = generar_recibo(
+            leer_xml(xml.encode("utf-8")), placa=_placa(conn, factura_id), validacion=texto_validacion(respuesta)
+        )
+    except RepresentacionInvalida as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"no se pudo armar el recibo: {e}") from None
+    # Como el PDF: lleva datos del comprador, queda en la auditoría quién lo imprimió (sin esos datos).
+    auditar(conn, "FACTURA_RECIBO", "factura", factura_id, usuario_id=sesion.usuario_id)
+    return Response(
+        contenido,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="recibo_{numero}.bin"',
             "Cache-Control": "no-store",
         },
     )

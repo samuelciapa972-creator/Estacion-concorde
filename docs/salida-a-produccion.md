@@ -83,10 +83,44 @@ Qué hacer:
 3. Solo entonces cambiar a `DIAN_AMBIENTE=1`.
 4. Si una no se resuelve, no inventar SQL a mano: dejarla anotada y consultar antes de tocar la base. Las facturas de habilitación son de prueba y no afectan los reportes de producción: cada documento guarda su ambiente y tanto el libro de facturas como el resumen diario filtran por el ambiente configurado.
 
+### 2.3 Prueba previa de una factura a empresa (NIT), a crédito y con tarjeta
+
+El set de pruebas pasó con clientes de cédula, de contado y en efectivo. Facturar a un NIT, a crédito o con tarjeta
+usa códigos del anexo 1.9 que la DIAN todavía no nos ha validado (`facturacion/xml_factura.py`): comprador persona
+jurídica (`AdditionalAccountID` 1) con su DV en `schemeID` y `TaxLevelCode` R-99-PN, forma de pago 2 (crédito, vence a
+30 días) y medio de pago 48 (tarjeta). Se confirman en habilitación, con `DIAN_AMBIENTE=2` y `make worker-dian`:
+
+1. En Clientes (o al facturar), registrar una empresa real o de prueba con NIT y DV.
+2. Facturar una venta a ese NIT con medio **Tarjeta**, y una venta que venga del surtidor como **CREDITO** (si no hay,
+   una venta manual a crédito).
+3. Esperar a FACTURADO. Si la DIAN rechaza, el motivo queda en el detalle de la factura: anotarlo y corregir antes de producción.
+4. Abrir el PDF y el recibo: la razón social, el NIT con DV, la forma y el medio de pago y, a crédito, el vencimiento.
+
+### 2.4 Impresora de recibos (térmica de 58 mm de la isla)
+
+El botón **Imprimir recibo** aparece cuando la factura queda validada (y en Facturación, **Recibo**). La API arma el
+recibo en ESC/POS desde el XML (`facturacion/recibo.py`), con la razón social y el NIT si el cliente es una empresa.
+La tablet lo manda a la impresora por uno de dos caminos (`Frontend/src/lib/impresion.js`):
+
+- **Por cable USB (WebUSB de Chrome):** la primera vez Chrome pregunta qué impresora usar; se elige la térmica y queda
+  recordada. Exige abrir el sistema por HTTPS (`make ca`).
+- **Por RawBT (USB o Bluetooth):** instalar "RawBT" desde Play Store en la tablet, abrirla, elegir la impresora
+  (USB o Bluetooth) y pulsar su impresión de prueba. Si en la pregunta de Chrome no se elige ninguna impresora USB, el
+  sistema usa RawBT desde entonces.
+
+Antes de la primera factura del día de salida: imprimir el recibo de una factura de habilitación y comprobar que salen
+el logo, las tildes y el QR (que se pueda escanear con un celular). Lo que no se ha probado todavía con esta impresora:
+el modo de caracteres (PC437) y la imagen (`GS v 0`); si salen símbolos raros o la imagen no sale, anotarlo.
+
+El logo es un texto "BIOMAX" (`backend/src/estacion/facturacion/recursos/logo_recibo.png`). Para usar el logo oficial:
+reemplazar ese PNG (fondo blanco; se ajusta solo a 48 mm x 12 mm) y reconstruir la imagen (`make stack`). Fuera de Docker
+también sirve poner la ruta del PNG en `RECIBO_LOGO` y reiniciar la API.
+
 ## 3. Procedimiento del día de salida
 
 1. Resolución 1876 y asociación de EDSC en catalogo-vpfe: ya hechas (sección 1). Comprobar en el catálogo que EDSC sigue asociado a nuestro software.
-2. Cola de habilitación vacía (sección 2.2) y nota de prueba aceptada (sección 2.1).
+2. Cola de habilitación vacía (sección 2.2), nota de prueba aceptada (sección 2.1), factura a empresa aceptada
+   (sección 2.3) y recibo impreso en la isla (sección 2.4).
 3. Editar `.env` (no se versiona):
    - `DIAN_AMBIENTE=1`
    - `DIAN_TEST_SET_ID=` vacío (en producción el worker no arranca con valor).
@@ -119,7 +153,8 @@ Qué hacer:
 9. Emitir **una factura real de verificación** (venta real, cliente real). Confirmar:
    - que la DIAN la acepta (estado FACTURADO en Facturación);
    - que el QR abre en el catálogo de producción (catalogo-vpfe);
-   - que llega el correo con el ZIP y que el PDF no dice "SIN VALIDEZ FISCAL / AMBIENTE DE PRUEBAS".
+   - que llega el correo con el ZIP y que el PDF no dice "SIN VALIDEZ FISCAL / AMBIENTE DE PRUEBAS";
+   - que el recibo impreso tampoco lo dice y lleva el número EDSC.
 10. Si algo sale mal en esa factura, anularla (sección 4). No reutilizar el número anulado.
 
 ### 3.1 La clave técnica

@@ -3,6 +3,7 @@ import { api, ErrorApi } from '../services/api';
 import { nuevaClave } from '../lib/clave';
 import { guardarArchivo } from '../lib/descarga';
 import { avisoEntrega, seguirConsultando } from '../lib/entrega';
+import { imprimir } from '../lib/impresion';
 import { NOMBRE_TIPO, TIPOS_DOCUMENTO, calcularDv, problemaNumero } from '../lib/documentos';
 import { galones, oracion, pesos } from '../lib/formato';
 import FormularioCliente from './FormularioCliente';
@@ -219,6 +220,7 @@ function Emision({ venta, cliente, medio, onAtras, onEmitida, onTerminar }) {
   const [error, setError] = useState(null);
   const [emitiendo, setEmitiendo] = useState(false);
   const [pdf, setPdf] = useState({ cargando: false, error: null });
+  const [recibo, setRecibo] = useState({ cargando: false, error: null, aviso: null });
 
   const [consultas, setConsultas] = useState(0);
 
@@ -262,6 +264,16 @@ function Emision({ venta, cliente, medio, onAtras, onEmitida, onTerminar }) {
     }
   };
 
+  const imprimirRecibo = async () => {
+    setRecibo({ cargando: true, error: null, aviso: null });
+    try {
+      const camino = await imprimir(await api.facturaRecibo(factura.id));
+      setRecibo({ cargando: false, error: null, aviso: camino === 'rawbt' ? 'Recibo enviado a RawBT.' : null });
+    } catch (err) {
+      setRecibo({ cargando: false, error: err, aviso: null });
+    }
+  };
+
   const fila = (titulo, valor, grande) => (
     <>
       <dt style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{titulo}</dt>
@@ -289,8 +301,14 @@ function Emision({ venta, cliente, medio, onAtras, onEmitida, onTerminar }) {
           {fila('Total', pesos(factura.total))}
           {factura.cufe && fila('CUFE', <span style={{ fontFamily: 'monospace', fontSize: '11px', wordBreak: 'break-all' }}>{factura.cufe}</span>)}
         </dl>
-        <MostrarError error={pdf.error} />
+        <MostrarError error={pdf.error || recibo.error} />
+        {recibo.aviso && <Mensaje tipo="info">{recibo.aviso}</Mensaje>}
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {factura.estado === 'FACTURADO' && (
+            <Boton disabled={recibo.cargando} onClick={imprimirRecibo} style={{ padding: '10px 18px' }}>
+              {recibo.cargando ? 'Imprimiendo...' : 'Imprimir recibo'}
+            </Boton>
+          )}
           {factura.estado === 'FACTURADO' && (
             <Boton variante="secundario" disabled={pdf.cargando} onClick={descargarPdf}>
               {pdf.cargando ? 'Generando PDF...' : 'Descargar PDF'}
