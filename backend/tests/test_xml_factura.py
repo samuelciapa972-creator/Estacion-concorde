@@ -255,27 +255,65 @@ class TestCufe(unittest.TestCase):
         self.assertEqual(codigo_seguridad_software(SOFTWARE, "SETP1"), esperado)
 
 
+EMPRESA = Cliente(
+    "NIT",
+    "900123456",
+    "Transportes de Prueba S.A.S.",
+    "",
+    "e@example.com",
+    str(calcular_dv("900123456")),
+    autoriza_tratamiento_datos=True,
+)
+
+
+class TestEmpresaCreditoYTarjeta(unittest.TestCase):
+    """Comprador con NIT, venta a crédito y pago con tarjeta (anexo 1.9; se confirman en habilitación)."""
+
+    def test_comprador_con_nit_va_como_persona_juridica_con_su_dv(self):
+        f = construir(solicitud(cliente=EMPRESA))
+        cliente = "//cac:AccountingCustomerParty"
+        self.assertEqual(texto(f, f"{cliente}/cbc:AdditionalAccountID"), "1")
+        for ruta in (
+            "cac:Party/cac:PartyIdentification/cbc:ID",
+            "cac:Party/cac:PartyTaxScheme/cbc:CompanyID",
+            "cac:Party/cac:PartyLegalEntity/cbc:CompanyID",
+        ):
+            (el,) = f.arbol.xpath(f"{cliente}/{ruta}", namespaces=NS)
+            self.assertEqual((el.text, el.get("schemeName"), el.get("schemeID")), ("900123456", "31", "8"))
+        self.assertEqual(
+            texto(f, f"{cliente}/cac:Party/cac:PartyTaxScheme/cbc:RegistrationName"), "TRANSPORTES DE PRUEBA S.A.S."
+        )
+        self.assertEqual(texto(f, f"{cliente}/cac:Party/cac:PartyTaxScheme/cbc:TaxLevelCode"), "R-99-PN")
+
+    def test_comprador_con_cedula_sigue_como_persona_natural_sin_dv(self):
+        f = construir()
+        cliente = "//cac:AccountingCustomerParty"
+        self.assertEqual(texto(f, f"{cliente}/cbc:AdditionalAccountID"), "2")
+        (el,) = f.arbol.xpath(f"{cliente}/cac:Party/cac:PartyIdentification/cbc:ID", namespaces=NS)
+        self.assertIsNone(el.get("schemeID"))
+        self.assertFalse(f.arbol.xpath(f"{cliente}//cbc:TaxLevelCode", namespaces=NS))
+
+    def test_credito_vence_a_30_dias_y_tarjeta_es_48(self):
+        f = construir(solicitud(forma="CREDITO", medio="TARJETA"))
+        self.assertEqual(texto(f, "//cac:PaymentMeans/cbc:ID"), "2")
+        self.assertEqual(texto(f, "//cac:PaymentMeans/cbc:PaymentMeansCode"), "48")
+        self.assertEqual(texto(f, "//cac:PaymentMeans/cbc:PaymentDueDate"), "2026-10-29")
+
+    def test_contado_vence_el_mismo_dia(self):
+        self.assertEqual(texto(construir(), "//cac:PaymentMeans/cbc:PaymentDueDate"), "2026-09-29")
+
+
 class TestRechazos(unittest.TestCase):
     """Lo que no está verificado se rechaza a propósito, en vez de generar un documento dudoso."""
 
-    def test_comprador_con_nit(self):
-        c = Cliente(
-            "NIT",
-            "900123456",
-            "Empresa de prueba",
-            "",
-            "e@example.com",
-            str(calcular_dv("900123456")),
-            autoriza_tratamiento_datos=True,
-        )
+    def test_otros_tipos_de_documento_formas_y_medios_de_pago(self):
+        pasaporte = Cliente("PA", "AB12345", "John", "Doe", "j@example.com", autoriza_tratamiento_datos=True)
         with self.assertRaises(FacturaNoSoportada):
-            construir(solicitud(cliente=c))
-
-    def test_credito_y_otros_medios_de_pago(self):
+            construir(solicitud(cliente=pasaporte))
         with self.assertRaises(FacturaNoSoportada):
-            construir(solicitud(forma="CREDITO"))
+            construir(solicitud(forma="OTRO"))
         with self.assertRaises(FacturaNoSoportada):
-            construir(solicitud(medio="TARJETA"))
+            construir(solicitud(medio="CHEQUE"))
 
     def test_linea_con_iva(self):
         con_iva = LineaFactura("1", "PRODUCTO", "UND", Decimal(1), Decimal(100), Decimal(119), Decimal("0.19"), "X")

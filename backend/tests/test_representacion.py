@@ -105,8 +105,8 @@ def _con_texto(xml: bytes, xpath: str, valor: str) -> bytes:
     [
         (lambda x: _sin(x, "//cbc:UUID"), "cbc:UUID"),
         (lambda x: _sin(x, "//cac:InvoiceLine"), "no tiene líneas"),
-        (lambda x: _con_texto(x, "//cac:PaymentMeans/cbc:PaymentMeansCode", "48"), "medio de pago"),
-        (lambda x: _con_texto(x, "//cac:PaymentMeans/cbc:ID", "2"), "forma de pago"),
+        (lambda x: _con_texto(x, "//cac:PaymentMeans/cbc:PaymentMeansCode", "ZZZ"), "medio de pago"),
+        (lambda x: _con_texto(x, "//cac:PaymentMeans/cbc:ID", "9"), "forma de pago"),
         (lambda x: x[:200], "ilegible"),
     ],
 )

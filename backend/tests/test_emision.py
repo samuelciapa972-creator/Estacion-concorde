@@ -16,7 +16,6 @@ import pytest
 
 from conftest import ENTORNO_DIAN, Escenario
 from estacion.facturacion.modelos import EstadoFactura
-from estacion.facturacion.xml_factura import FacturaNoSoportada
 from estacion.servicios.configuracion import ConfiguracionIncompleta
 from estacion.servicios.emision import (
     ClaveReutilizada,
@@ -245,8 +244,6 @@ def test_produccion_con_numeracion_de_produccion_emite(escenario, conn):
         ("EFECTIVO", _sin("DIAN_SOFTWARE_PIN"), ConfiguracionIncompleta, "DIAN_SOFTWARE_PIN"),
         ("EFECTIVO", {**ENTORNO_DIAN, "DIAN_AMBIENTE": "3"}, ConfiguracionIncompleta, "DIAN_AMBIENTE"),
         ("EFECTIVO", {}, ConfiguracionIncompleta, "DIAN_CLAVE_TECNICA, DIAN_AMBIENTE, DIAN_SOFTWARE_ID"),
-        # Código DIAN de tarjeta SIN VERIFICAR: el generador la rechaza a propósito.
-        ("TARJETA", ENTORNO_DIAN, FacturaNoSoportada, "medio de pago"),
     ],
 )
 def test_si_no_se_puede_emitir_no_se_gasta_el_consecutivo(escenario, conn, medio, entorno, error, mensaje):

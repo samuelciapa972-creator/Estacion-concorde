@@ -174,7 +174,7 @@ def test_nota_con_consecutivo_invalido_no_se_construye(factura):
 
 def test_nota_reutiliza_las_validaciones_de_la_factura(factura):
     with pytest.raises(FacturaNoSoportada, match="medio de pago"):
-        nota(factura, sol=solicitud(medio="TARJETA", fecha=FECHA_NOTA))
+        nota(factura, sol=solicitud(medio="CHEQUE", fecha=FECHA_NOTA))
 
 
 # ------------------------------------------------------------------------------------------ firma

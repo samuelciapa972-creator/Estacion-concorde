@@ -88,6 +88,7 @@ class DatosRepresentacion:
     comprador_nombre: str
     comprador_tipo: str
     comprador_documento: str
+    comprador_dv: str  # dígito de verificación de un NIT; vacío con cédula
     # Pago y totales (los textos tal cual del XML, para el QR; los Decimal para mostrar)
     forma_pago: str
     medio_pago: str
@@ -115,6 +116,11 @@ def _atributo(raiz: etree._Element, ruta: str, atributo: str) -> str:
     if not valor:
         raise RepresentacionInvalida(f"al XML le falta el atributo {atributo} de {ruta}")
     return valor
+
+
+def _atributo_opcional(raiz: etree._Element, ruta: str, atributo: str) -> str:
+    el = raiz.find(ruta, _NS)
+    return "" if el is None else el.get(atributo, "")
 
 
 def _codigo(tabla: dict[str, str], valor: str, que: str) -> str:
@@ -195,6 +201,7 @@ def leer_xml(xml: bytes) -> DatosRepresentacion:
             _TIPO_DOC, _atributo(raiz, f"{cus}/cac:PartyIdentification/cbc:ID", "schemeName"), "tipo de documento"
         ),
         comprador_documento=_texto(raiz, f"{cus}/cac:PartyIdentification/cbc:ID"),
+        comprador_dv=_atributo_opcional(raiz, f"{cus}/cac:PartyIdentification/cbc:ID", "schemeID"),
         forma_pago=_codigo(_FORMA_PAGO, _texto(raiz, "cac:PaymentMeans/cbc:ID"), "forma de pago"),
         medio_pago=_codigo(_MEDIO_PAGO, _texto(raiz, "cac:PaymentMeans/cbc:PaymentMeansCode"), "medio de pago"),
         vencimiento=_texto(raiz, "cac:PaymentMeans/cbc:PaymentDueDate"),
@@ -207,6 +214,12 @@ def leer_xml(xml: bytes) -> DatosRepresentacion:
         valor_total=Decimal(total_xml),
         lineas=tuple(lineas),
     )
+
+
+def identificacion_comprador(d: DatosRepresentacion) -> str:
+    """ "NIT 900123456-8" con el dígito de verificación; "CC 1000000017" sin él."""
+    dv = f"-{d.comprador_dv}" if d.comprador_dv else ""
+    return f"{d.comprador_tipo} {d.comprador_documento}{dv}"
 
 
 def texto_validacion(respuesta: dict[str, object] | None) -> str:
@@ -481,7 +494,7 @@ def _comprador(c: Canvas, d: DatosRepresentacion, arriba: float) -> float:
     c.drawString(_MARGEN + 2 * mm, arriba - 3.6 * mm, "VENDIDO A:")
     x = _MARGEN + 2 * mm
     _etiqueta_valor(c, x, arriba - 9.5 * mm, "NOMBRE", d.comprador_nombre, 18 * mm)
-    _etiqueta_valor(c, x, arriba - 14.5 * mm, "IDENTIFICACIÓN", f"{d.comprador_tipo} {d.comprador_documento}", 26 * mm)
+    _etiqueta_valor(c, x, arriba - 14.5 * mm, "IDENTIFICACIÓN", identificacion_comprador(d), 26 * mm)
     x2 = _MARGEN + ancho * 0.62
     _etiqueta_valor(c, x2, arriba - 9.5 * mm, "FORMA DE PAGO", d.forma_pago, 27 * mm)
     _etiqueta_valor(c, x2, arriba - 14.5 * mm, "MEDIO DE PAGO", d.medio_pago, 27 * mm)
@@ -635,6 +648,7 @@ _EJEMPLO = DatosRepresentacion(
     telefono="3000000000", email="ficticia@example.com", nit_proveedor_software="900123456", resolucion="0",
     vigente_desde="2026-01-01", vigente_hasta="2026-12-31", prefijo="PRUE", rango_desde="1", rango_hasta="1000",
     comprador_nombre="CLIENTE FICTICIO PRUEBA", comprador_tipo="CC", comprador_documento="1000000017",
+    comprador_dv="",
     forma_pago="Contado", medio_pago="Efectivo", vencimiento="2026-10-01", valor_bruto_xml="29757.000000",
     valor_total_xml="29757.000000", valor_bruto=Decimal("29757"), base_imponible=Decimal(0), impuestos=Decimal(0),
     descuentos=Decimal(0), valor_total=Decimal("29757"),

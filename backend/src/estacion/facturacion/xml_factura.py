@@ -1,10 +1,11 @@
 """Generador del XML de la factura electrónica de venta (UBL 2.1, formato DIAN), SIN FIRMAR.
 
-ALCANCE DE ESTA PRIMERA VERSIÓN (lo único que hay una factura real validada para comparar):
-    contado · pago en efectivo · comprador persona natural con cédula · combustible sin impuestos
-Todo lo demás lanza `FacturaNoSoportada` a propósito, en vez de adivinar: crédito, otros medios de pago,
-comprador con NIT, líneas con IVA/impuestos y otros tipos de documento se agregan cuando se verifiquen
-contra el anexo técnico de la DIAN.
+ALCANCE:
+    contado o crédito · efectivo o tarjeta · comprador con cédula (persona natural) o con NIT (empresa)
+    · combustible sin impuestos
+La factura real validada de referencia es de contado, efectivo y cédula; NIT, crédito y tarjeta siguen el anexo
+técnico y se confirman en habilitación antes de producción. Todo lo demás lanza `FacturaNoSoportada` a propósito,
+en vez de adivinar: otros medios de pago, líneas con IVA/impuestos y otros tipos de documento.
 
 REFERENCIA: la estructura calca la de una factura de gasolina real (Terpel/Masser, ambiente de producción)
 que la DIAN validó ("Documento validado por la DIAN", con notificaciones). La prueba
@@ -24,7 +25,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from lxml import etree
@@ -58,10 +59,12 @@ _ESQUEMA_LOCACION = (
     "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2 "
     "http://docs.oasis-open.org/ubl/os-UBL-2.1/xsd/maindoc/UBL-Invoice-2.1.xsd"
 )
-# Solo los códigos que aparecen en la factura real de referencia; el resto se agrega verificando el anexo.
-_TIPO_DOCUMENTO_DIAN = {"CC": "13"}
-_MEDIO_PAGO_DIAN = {"EFECTIVO": "10"}
-_FORMA_PAGO_DIAN = {"CONTADO": "1"}
+# Códigos del anexo técnico 1.9 (tablas 13.2.1 tipo de documento, 13.3.4.1 forma y 13.3.4.2 medio de pago). CC,
+# contado y efectivo salen de la factura real de referencia; NIT, crédito y tarjeta se confirman en habilitación.
+_TIPO_DOCUMENTO_DIAN = {"CC": "13", "NIT": "31"}
+_MEDIO_PAGO_DIAN = {"EFECTIVO": "10", "TARJETA": "48"}  # la pantalla no distingue débito de crédito: 48 = tarjeta
+_FORMA_PAGO_DIAN = {"CONTADO": "1", "CREDITO": "2"}
+DIAS_CREDITO = 30  # vencimiento de una venta a crédito, contado desde la emisión
 
 
 class FacturaNoSoportada(ValueError):
@@ -150,9 +153,9 @@ def validar_solicitud(sol: SolicitudFactura) -> None:
             f"(solo {sorted(_TIPO_DOCUMENTO_DIAN)}); falta verificar su código y la responsabilidad del comprador"
         )
     if sol.forma_pago not in _FORMA_PAGO_DIAN:
-        raise FacturaNoSoportada(f"forma de pago {sol.forma_pago!r} todavía no soportada (solo contado)")
+        raise FacturaNoSoportada(f"forma de pago {sol.forma_pago!r} todavía no soportada (solo contado o crédito)")
     if sol.medio_pago not in _MEDIO_PAGO_DIAN:
-        raise FacturaNoSoportada(f"medio de pago {sol.medio_pago!r} todavía no soportado (solo efectivo)")
+        raise FacturaNoSoportada(f"medio de pago {sol.medio_pago!r} todavía no soportado (solo efectivo o tarjeta)")
     if not sol.lineas:
         raise FacturaNoSoportada("la factura no tiene líneas")
     for linea in sol.lineas:
@@ -195,6 +198,17 @@ def _direccion(padre: etree._Element, nombre: str, e: Emisor) -> None:
 def fecha_y_hora(momento: datetime) -> tuple[str, str]:
     """`IssueDate` e `IssueTime` (con la zona de Colombia), tal como entran también al CUFE/CUDE."""
     return momento.strftime("%Y-%m-%d"), momento.strftime("%H:%M:%S") + _ZONA_HORARIA
+
+
+def vencimiento(forma_pago: str, fecha: str) -> str:
+    """`PaymentDueDate`: el mismo día de contado; `DIAS_CREDITO` después a crédito.
+
+    >>> vencimiento("CONTADO", "2026-10-28"), vencimiento("CREDITO", "2026-10-28")
+    ('2026-10-28', '2026-11-27')
+    """
+    if forma_pago != "CREDITO":
+        return fecha
+    return (date.fromisoformat(fecha) + timedelta(days=DIAS_CREDITO)).isoformat()
 
 
 def documento_adquirente(sol: SolicitudFactura) -> str:
@@ -259,6 +273,9 @@ def agregar_partes_y_totales(
     nombre_cliente = " ".join(f"{cliente.nombres} {cliente.apellidos}".split()).upper()
     doc_cliente = documento_adquirente(sol)
     tipo_doc = _TIPO_DOCUMENTO_DIAN[cliente.tipo_documento]
+    empresa = cliente.tipo_documento == "NIT"
+    # Con NIT el documento lleva su dígito de verificación (schemeID), como el del vendedor.
+    dv_cliente = {"schemeID": str(calcular_dv(doc_cliente))} if empresa else {}
 
     # ---- Vendedor ----
     vendedor = _sub(raiz, "cac:AccountingSupplierParty")
@@ -288,28 +305,30 @@ def agregar_partes_y_totales(
     _sub(contacto, "cbc:Telephone", emisor.telefono)
     _sub(contacto, "cbc:ElectronicMail", emisor.email)
 
-    # ---- Comprador (persona natural con cédula) ----
+    # ---- Comprador (persona natural con cédula, o empresa con NIT) ----
     comprador = _sub(raiz, "cac:AccountingCustomerParty")
-    _sub(comprador, "cbc:AdditionalAccountID", "2")  # 2 = persona natural
+    _sub(comprador, "cbc:AdditionalAccountID", "1" if empresa else "2")  # 1 = persona jurídica, 2 = natural
     parte_c = _sub(comprador, "cac:Party")
-    _sub(_sub(parte_c, "cac:PartyIdentification"), "cbc:ID", doc_cliente, schemeName=tipo_doc)
+    _sub(_sub(parte_c, "cac:PartyIdentification"), "cbc:ID", doc_cliente, **dv_cliente, schemeName=tipo_doc)
     _sub(_sub(parte_c, "cac:PartyName"), "cbc:Name", nombre_cliente)
     fiscal_c = _sub(parte_c, "cac:PartyTaxScheme")
     _sub(fiscal_c, "cbc:RegistrationName", nombre_cliente)
-    _sub(fiscal_c, "cbc:CompanyID", doc_cliente, schemeName=tipo_doc, **_AGENCIA)
+    _sub(fiscal_c, "cbc:CompanyID", doc_cliente, **dv_cliente, schemeName=tipo_doc, **_AGENCIA)
+    if empresa:  # R-99-PN = "no aplica / otros": el sistema no guarda las responsabilidades del comprador
+        _sub(fiscal_c, "cbc:TaxLevelCode", "R-99-PN", listName="No aplica")
     esquema_c = _sub(fiscal_c, "cac:TaxScheme")
     _sub(esquema_c, "cbc:ID", "ZZ")
     _sub(esquema_c, "cbc:Name", "No aplica")
     legal_c = _sub(parte_c, "cac:PartyLegalEntity")
     _sub(legal_c, "cbc:RegistrationName", nombre_cliente)
-    _sub(legal_c, "cbc:CompanyID", doc_cliente, schemeName=tipo_doc, **_AGENCIA)
+    _sub(legal_c, "cbc:CompanyID", doc_cliente, **dv_cliente, schemeName=tipo_doc, **_AGENCIA)
     _sub(_sub(parte_c, "cac:Contact"), "cbc:ElectronicMail", cliente.email.strip())
 
-    # ---- Pago (contado, efectivo) ----
+    # ---- Pago ----
     pago = _sub(raiz, "cac:PaymentMeans")
     _sub(pago, "cbc:ID", _FORMA_PAGO_DIAN[sol.forma_pago])
     _sub(pago, "cbc:PaymentMeansCode", _MEDIO_PAGO_DIAN[sol.medio_pago])
-    _sub(pago, "cbc:PaymentDueDate", fecha)
+    _sub(pago, "cbc:PaymentDueDate", vencimiento(sol.forma_pago, fecha))
 
     # ---- Totales (sin impuestos, como la factura de referencia) ----
     monetario = _sub(raiz, "cac:LegalMonetaryTotal")
