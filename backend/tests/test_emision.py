@@ -215,6 +215,18 @@ def test_produccion_con_numeracion_de_habilitacion_no_emite(escenario, conn):
     assert contar(escenario, "factura") == 0 and contar(escenario, "outbox") == 0
 
 
+def test_habilitacion_con_numeracion_de_produccion_no_emite(escenario, conn):
+    # El caso inverso: la resolución de producción (EDSC) activa y el sistema en habilitación. No gasta un EDSC.
+    escenario.datos.conn.execute(
+        "UPDATE numeracion SET prefijo = 'EDSC', ambiente = '1' WHERE id = %s", (escenario.numeracion,)
+    )
+    origen = Origen("despacho", escenario.datos.despacho())
+    with pytest.raises(ConfiguracionIncompleta, match="ambiente 1 y DIAN_AMBIENTE es 2"):
+        solicitar(escenario, conn, origen, entorno=ENTORNO_DIAN)
+    assert escenario.siguiente() == 1
+    assert contar(escenario, "factura") == 0 and contar(escenario, "outbox") == 0
+
+
 def test_produccion_con_numeracion_de_produccion_emite(escenario, conn):
     datos = escenario.datos
     datos.conn.execute("UPDATE numeracion SET prefijo = 'EDSC', ambiente = '1' WHERE id = %s", (escenario.numeracion,))
