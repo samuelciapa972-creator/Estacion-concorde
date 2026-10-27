@@ -394,3 +394,47 @@ def test_guardar_clave_tecnica_exige_ambiente_1(escenario, tmp_path):
     assert habilitacion.main(["guardar-clave-tecnica", "--prefijo", "EDSC", "--archivo", str(ruta)],
                              entorno=entorno(escenario), cliente_dian=dian_produccion()) == 2  # fmt: skip
     assert not ruta.exists()
+
+
+def test_configurar_produccion_clave_no_ascii_no_revienta(escenario, tmp_path, capsys):
+    # hmac.compare_digest sobre str con caracteres no ASCII lanzaba TypeError: se comparan bytes.
+    e = entorno_produccion(escenario, tmp_path, DIAN_CLAVE_TECNICA="clavé-técnica")
+    assert habilitacion.main(["configurar-produccion", "--prefijo", "EDSC"], entorno=e,
+                             confirmar=lambda _: "EDSC", cliente_dian=dian_produccion()) == 1  # fmt: skip
+    captura = capsys.readouterr()
+    assert "no coincide" in captura.err and "clavé-técnica" not in captura.out + captura.err
+    assert numeraciones(escenario) == [("SETP", "2", 1, True)]
+
+
+def test_verificar_produccion_todo_bien_compara_clave_resolucion_y_rango(escenario, tmp_path, capsys):
+    activa_edsc(escenario)
+    codigo, salida = verificar(escenario, tmp_path, capsys)
+    assert codigo == 0
+    assert "✔ DIAN_CLAVE_TECNICA coincide con la del rango EDSC en la DIAN" in salida
+    assert "✔ numeración EDSC igual a la de la DIAN: resolución 18764000000001, 1-1000000" in salida
+
+
+@pytest.mark.parametrize("clave", ["otra-clave-secreta", "clavé-técnica-ñ"])
+def test_verificar_produccion_clave_tecnica_distinta(escenario, tmp_path, capsys, clave):
+    activa_edsc(escenario)
+    codigo, salida = verificar(escenario, tmp_path, capsys, DIAN_CLAVE_TECNICA=clave)
+    assert codigo != 0 and "✘ DIAN_CLAVE_TECNICA no coincide con la clave técnica del rango EDSC" in salida
+    assert clave not in salida and CLAVE_TECNICA not in salida
+
+
+def test_verificar_produccion_dian_sin_clave_tecnica(escenario, tmp_path, capsys):
+    activa_edsc(escenario)
+    codigo, salida = verificar(escenario, tmp_path, capsys, dian=dian_produccion(clave_tecnica=""))
+    assert codigo != 0 and "✘ DIAN_CLAVE_TECNICA no coincide" in salida
+
+
+@pytest.mark.parametrize(
+    "cambio",
+    [dict(resolucion="18764000000999"), dict(desde=5), dict(hasta=500000)],
+    ids=["resolucion", "desde", "hasta"],
+)
+def test_verificar_produccion_numeracion_distinta_de_la_dian(escenario, tmp_path, capsys, cambio):
+    activa_edsc(escenario)
+    codigo, salida = verificar(escenario, tmp_path, capsys, dian=dian_produccion(**cambio))
+    assert codigo != 0
+    assert "✘ la numeración EDSC activa (resolución 18764000000001, 1-1000000) no es la de la DIAN" in salida

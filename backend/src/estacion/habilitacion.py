@@ -57,6 +57,12 @@ SQL_PENDIENTES_DE_HABILITACION = """SELECT count(*) FROM outbox o JOIN factura f
     WHERE o.estado = 'PENDIENTE' AND o.tipo IN ('ENVIAR_DIAN', 'CONSULTAR_DIAN') AND f.ambiente = '2'"""
 
 
+def _misma_clave(a: str, b: str) -> bool:
+    """Comparación en tiempo constante de dos claves técnicas; vacía nunca coincide. Sobre bytes: con str,
+    `compare_digest` lanza TypeError si alguna lleva caracteres no ASCII."""
+    return bool(a) and bool(b) and hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+
+
 def _err(texto: str) -> None:
     print(texto, file=sys.stderr)
 
@@ -242,7 +248,7 @@ def _configurar_produccion(
         _err(f"la DIAN no tiene un rango de producción con el prefijo {prefijo}")
         return 1
     clave = entorno.get("DIAN_CLAVE_TECNICA", "").strip()
-    if not rango.clave_tecnica or not hmac.compare_digest(rango.clave_tecnica, clave):
+    if not _misma_clave(rango.clave_tecnica, clave):
         _err(
             f"la clave técnica del rango {prefijo} en la DIAN no coincide con DIAN_CLAVE_TECNICA: no se configuró nada"
         )
@@ -349,15 +355,15 @@ def _verificar_produccion(
         de_prueba = es_certificado_de_prueba(cert)
         revisar(not de_prueba, "certificado de la empresa" if not de_prueba else "el certificado es de PRUEBA")
     activa = conn.execute(
-        """SELECT prefijo, ambiente, siguiente, hasta, vigente_desde, vigente_hasta FROM numeracion
-           WHERE estacion_id = %s AND activa""",
+        """SELECT prefijo, ambiente, siguiente, hasta, vigente_desde, vigente_hasta, numero_resolucion, desde
+           FROM numeracion WHERE estacion_id = %s AND activa""",
         (estacion_id,),
     ).fetchone()
     prefijo_activo = None
     if activa is None or activa[1] != "1":
         revisar(False, "no hay una numeración activa de producción (ambiente 1): use configurar-produccion")
     else:
-        prefijo_activo, _, siguiente, hasta, desde_vig, hasta_vig = activa
+        prefijo_activo, _, siguiente, hasta, desde_vig, hasta_vig, resolucion, desde = activa
         hoy = ahora_local().date()
         revisar(desde_vig <= hoy <= hasta_vig, f"numeración {prefijo_activo} vigente hasta {hasta_vig}"
                 if desde_vig <= hoy <= hasta_vig else f"numeración {prefijo_activo} fuera de vigencia")  # fmt: skip
@@ -369,9 +375,21 @@ def _verificar_produccion(
     else:
         revisar(True, "GetNumberingRange responde")
         if prefijo_activo is not None:
-            esta = any(x.prefijo == prefijo_activo for x in r.rangos)
-            revisar(esta, f"la DIAN tiene el prefijo {prefijo_activo}" if esta
+            del_prefijo = [x for x in r.rangos if x.prefijo == prefijo_activo]
+            revisar(bool(del_prefijo), f"la DIAN tiene el prefijo {prefijo_activo}" if del_prefijo
                     else f"la DIAN no devolvió el prefijo {prefijo_activo}")  # fmt: skip
+            if del_prefijo:
+                # Si la DIAN devuelve varios rangos con el prefijo, se compara el de la misma resolución.
+                rango = next((x for x in del_prefijo if x.resolucion == resolucion), del_prefijo[0])
+                igual = (rango.resolucion, rango.desde, rango.hasta) == (resolucion, desde, hasta)
+                revisar(igual, f"numeración {prefijo_activo} igual a la de la DIAN: resolución {resolucion}, "
+                        f"{desde}-{hasta}" if igual else f"la numeración {prefijo_activo} activa (resolución "
+                        f"{resolucion}, {desde}-{hasta}) no es la de la DIAN (resolución {rango.resolucion}, "
+                        f"{rango.desde}-{rango.hasta}): revise configurar-produccion")  # fmt: skip
+                clave = _misma_clave(rango.clave_tecnica, entorno.get("DIAN_CLAVE_TECNICA", "").strip())
+                revisar(clave, f"DIAN_CLAVE_TECNICA coincide con la del rango {prefijo_activo} en la DIAN" if clave
+                        else f"DIAN_CLAVE_TECNICA no coincide con la clave técnica del rango {prefijo_activo} en la "
+                        "DIAN (no se muestra ninguna)")  # fmt: skip
     smtp = bool(entorno.get("ESTACION_SMTP_USUARIO", "").strip())
     revisar(smtp, "SMTP configurado" if smtp else "falta ESTACION_SMTP_USUARIO (el correo saldría sin cuenta)")
     pendientes = _pendientes_de_habilitacion(conn)
