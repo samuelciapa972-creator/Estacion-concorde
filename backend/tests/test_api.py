@@ -528,6 +528,17 @@ def test_exportacion_contador_solo_administrador_y_formato_valido(api):
     assert api.get(f"/reportes/contador?{rango}&formato=doc", api.admin).status_code == 422
 
 
+@pytest.mark.parametrize("ambiente", ["", "3"])
+@pytest.mark.parametrize("formato", ["xlsx", "csv", "pdf"])
+def test_exportacion_contador_sin_dian_ambiente_503(armar, formato, ambiente):
+    # Sin DIAN_AMBIENTE válido no se sabe qué facturas contar: antes salía un archivo vacío sin avisar.
+    api = armar({**ENTORNO_DIAN, "DIAN_AMBIENTE": ambiente})
+    r = api.get(f"/reportes/contador?desde=2026-09-01&hasta=2026-09-30&formato={formato}", api.admin)
+    assert r.status_code == 503, r.text
+    assert r.json()["detail"].startswith("no se puede exportar:") and "DIAN_AMBIENTE" in r.json()["detail"]
+    assert api.e.datos.uno("SELECT count(*) FROM auditoria WHERE accion = 'EXPORTE_CONTADOR'") == 0
+
+
 def test_reporte_pdf_por_api(api):
     api.e.datos.despacho()
     rango = "desde=2026-09-01&hasta=2026-09-30"

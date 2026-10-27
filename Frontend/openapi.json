@@ -3482,6 +3482,16 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "DIAN_AMBIENTE vacío o inválido: no se sabe qué facturas contar"
           }
         },
         "security": [

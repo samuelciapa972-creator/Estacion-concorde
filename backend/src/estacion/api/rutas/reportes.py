@@ -12,6 +12,7 @@ from fastapi.responses import Response
 
 from ...servicios import exportacion_contador, reportes_bd, reportes_pdf
 from ...servicios._bd import auditar
+from ...servicios.configuracion import ConfiguracionIncompleta, exigir_ambiente
 from ..dependencias import Conn, SesionAdmin, exigir_rango
 from ..esquemas import AnomaliaSalida, Error, FilaTurnoSalida, FilaVentasSalida, PosibleDuplicadoSalida, Severidad
 
@@ -78,7 +79,11 @@ def exportar(conn: Conn, _: SesionAdmin, surtidor_id: int, desde: date, hasta: d
 @router.get(
     "/reportes/contador",
     response_class=Response,
-    responses={200: {"content": {XLSX: {}, "text/csv": {}, PDF: {}}}, 403: {"model": Error}},
+    responses={
+        200: {"content": {XLSX: {}, "text/csv": {}, PDF: {}}},
+        403: {"model": Error},
+        503: {"model": Error, "description": "DIAN_AMBIENTE vacío o inválido: no se sabe qué facturas contar"},
+    },
     summary="Ventas y facturas para la contabilidad (formato PROVISIONAL; lleva datos personales)",
 )
 def contador(
@@ -90,7 +95,10 @@ def contador(
     formato: Literal["xlsx", "csv", "pdf"] = "xlsx",
 ) -> Response:
     exigir_rango(desde, hasta, hasta_incluido=True)
-    ambiente = request.app.state.anulacion.ambiente_actual  # el de DIAN_AMBIENTE
+    try:  # el de DIAN_AMBIENTE; sin él, el archivo saldría vacío sin avisar
+        ambiente = exigir_ambiente(request.app.state.anulacion.ambiente_actual)
+    except ConfiguracionIncompleta as e:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"no se puede exportar: {e}") from None
     if formato == "csv":
         contenido, tipo = exportacion_contador.csv_facturas(conn, desde, hasta, ambiente), "text/csv; charset=utf-8"
     elif formato == "pdf":
