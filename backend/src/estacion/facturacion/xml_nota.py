@@ -19,6 +19,7 @@ SIN VERIFICAR (lo dirá la nota de prueba en habilitación):
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -42,6 +43,10 @@ from .xml_factura import (
     fecha_y_hora,
     validar_solicitud,
 )
+
+# Lo que XML 1.0 no admite en el texto (lxml lanza ValueError): controles C0 salvo tabulación y saltos de línea,
+# sustitutos sueltos y los no-caracteres U+FFFE/U+FFFF. Llegan pegados desde Word u otros programas.
+CARACTERES_NO_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]")
 
 NS_NOTA = {**NS, None: "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"}
 _ESQUEMA_LOCACION = (

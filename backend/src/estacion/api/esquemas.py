@@ -10,9 +10,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..facturacion.documentos import TIPOS_DOCUMENTO
+from ..facturacion.xml_nota import CARACTERES_NO_XML
 
 TipoDocumento = Literal["CC", "NIT", "NIT_EXTERIOR", "CE", "PA", "PPT"]
 assert set(TipoDocumento.__args__) == TIPOS_DOCUMENTO  # type: ignore[attr-defined]  # una sola fuente de verdad
@@ -176,6 +177,14 @@ class AnulacionEntrada(Esquema):
         description="generada UNA vez por intento de anulación; reintentar con la misma clave no duplica la nota",
     )
     motivo: str = Field(min_length=1, max_length=500, description="por qué se anula (sale en la nota crédito)")
+
+    @field_validator("motivo")
+    @classmethod
+    def _sin_caracteres_de_control(cls, motivo: str) -> str:
+        # Controles pegados desde Word u otro programa: el XML de la nota no los admite.
+        if CARACTERES_NO_XML.search(motivo):
+            raise ValueError("el motivo tiene caracteres no permitidos (controles pegados de otro programa)")
+        return motivo
 
 
 class ClienteFactura(BaseModel):

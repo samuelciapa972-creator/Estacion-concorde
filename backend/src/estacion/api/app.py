@@ -103,6 +103,10 @@ def crear_app(
     for tipo, (codigo, prefijo) in ERRORES.items():
         app.add_exception_handler(tipo, _manejador(codigo, prefijo))
     app.add_exception_handler(ClienteInvalido, _cliente_invalido)
+    # Errores de la base sin mapear (conexión caída, bloqueo mutuo, tiempo agotado): son transitorios y la
+    # transacción ya se deshizo. 503 con un mensaje fijo: el texto de psycopg lleva detalles internos.
+    app.add_exception_handler(psycopg.OperationalError, _base_no_disponible)
+    app.add_exception_handler(PoolTimeout, _base_no_disponible)
 
     for r in (sesion.router, pista.router, clientes.router, facturas.router, reportes.router, admin.router):
         app.include_router(r)
@@ -136,6 +140,11 @@ def _manejador(codigo: int, prefijo: str):
         return JSONResponse({"detail": f"{prefijo}{exc}"}, status_code=codigo)
 
     return manejar
+
+
+async def _base_no_disponible(_: Request, exc: Exception) -> JSONResponse:
+    log.warning("error transitorio de la base de datos: %s", type(exc).__name__)  # sin el texto: lleva detalles
+    return _no_disponible("la base de datos no está disponible en este momento: intente de nuevo")
 
 
 async def _cliente_invalido(_: Request, exc: Exception) -> JSONResponse:

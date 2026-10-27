@@ -17,17 +17,20 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-from psycopg import pq
+from psycopg import errors, pq
 
 from ..facturacion.modelos import EstadoFactura, SolicitudFactura, TipoTrabajo
-from ..facturacion.xml_nota import ReferenciaFactura, construir_nota_credito
+from ..facturacion.xml_nota import CARACTERES_NO_XML, ReferenciaFactura, construir_nota_credito
 from ._bd import Conexion, ahora_local, auditar, encolar, exigir_autocommit
-from .configuracion import ConfiguracionIncompleta, cargar_configuracion
+from .configuracion import ConfiguracionIncompleta, cargar_configuracion, exigir_ambiente
 from .emision import ClaveReutilizada, Origen, leer_cliente, leer_origen
 
 PREFIJO_NOTA = {"1": "NCE", "2": "NCP"}
 LARGO_MOTIVO = 500
 _ESTADOS_VIVOS = ("EN_PROCESO", "INCIERTO", "FACTURADO")
+# Restricciones únicas de `factura` que un INSERT/UPDATE de la nota puede chocar (nombres de PostgreSQL).
+_UNICA_CLAVE = "factura_clave_emision_key"
+_UNICAS_NUMERO = ("factura_numero_unico", "factura_cufe_key")
 
 
 def es_anulable(
@@ -84,8 +87,19 @@ def asignar_consecutivo_nota(conn: Conexion, estacion_id: int, ambiente: str) ->
         raise ConfiguracionIncompleta(
             f"la serie de notas del ambiente {ambiente} tiene el prefijo {prefijo}, y debe ser {PREFIJO_NOTA[ambiente]}"
         )
+    # El contador atrás de las notas guardadas (restauración parcial, edición a mano) daría un número repetido.
+    if conn.execute(
+        "SELECT 1 FROM factura WHERE prefijo = %s AND consecutivo = %s", (prefijo, siguiente)
+    ).fetchone():  # fmt: skip
+        raise _serie_desfasada(prefijo)
     conn.execute("UPDATE numeracion_nota SET siguiente = siguiente + 1 WHERE id = %s", (id_,))
     return prefijo, siguiente
+
+
+def _serie_desfasada(prefijo: str) -> ConfiguracionIncompleta:
+    return ConfiguracionIncompleta(
+        f"la serie de notas {prefijo} está desfasada respecto a las notas guardadas: revise numeracion_nota"
+    )
 
 
 class ServicioAnulacion:
@@ -107,13 +121,17 @@ class ServicioAnulacion:
         """Numera la nota crédito que anula `factura_id`, guarda su XML sin firmar y encola el envío.
         Idempotente por `clave`.
 
-        Lanza (sin gastar consecutivo): ValueError (motivo vacío), FacturaNoAnulable, ClaveReutilizada,
+        Lanza (sin gastar consecutivo): ValueError (motivo vacío o con caracteres que el XML no admite),
+        FacturaNoAnulable, ClaveReutilizada,
         ClienteNoDisponible, ConfiguracionIncompleta, FacturaNoSoportada, ClienteInvalido.
         """
         exigir_autocommit(conn)
         motivo = motivo.strip()[:LARGO_MOTIVO].strip()
         if not motivo:
             raise ValueError("el motivo de la anulación es obligatorio")
+        if CARACTERES_NO_XML.search(motivo):  # la API ya lo rechaza (422); esto cubre a otros llamadores
+            raise ValueError("el motivo tiene caracteres no permitidos (controles pegados de otro programa)")
+        ambiente_actual = exigir_ambiente(self.ambiente_actual)  # sin él, ninguna factura es "de otro ambiente"
         with conn.transaction():
             # 1. El bloqueo de la factura serializa a dos usuarios (o dos clics) sobre la misma anulación.
             f = conn.execute(
@@ -156,7 +174,7 @@ class ServicioAnulacion:
                 raise FacturaNoAnulable(
                     f"la factura {numero} es de un despacho de surtidor: solo se anulan ventas manuales"
                 )
-            if ambiente != self.ambiente_actual:
+            if ambiente != ambiente_actual:
                 raise FacturaNoAnulable(f"la factura {numero} se emitió en otro ambiente de la DIAN")
             nota = conn.execute(
                 "SELECT id, estado, prefijo, consecutivo FROM factura WHERE referencia_id = %s FOR UPDATE",
@@ -213,30 +231,39 @@ class ServicioAnulacion:
             )
             xml_texto = xml.xml.decode("utf-8")
 
-            # 7. Guardar la nota y encolar el envío.
-            if nota_id is None:
-                nota_id = conn.execute(
-                    """INSERT INTO factura (clave_emision, tipo, referencia_id, motivo, cliente_id, usuario_id,
-                                            prefijo, consecutivo, forma_pago, medio_pago, total, fecha_emision,
-                                            cufe, xml_sin_firmar, ambiente)
-                       VALUES (%s, 'NOTA_CREDITO', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                       RETURNING id""",
-                    (clave, factura_id, motivo, cliente_id, usuario_id, prefijo, consecutivo, forma_pago,
-                     medio_pago, total_f, fecha, xml.cufe, xml_texto, config.software.ambiente),
-                ).fetchone()[0]  # type: ignore[index]  # fmt: skip
-                accion = "ANULACION_SOLICITADA"
-            else:
-                conn.execute(
-                    """UPDATE factura SET clave_emision = %s, estado = 'EN_PROCESO', motivo = %s, cliente_id = %s,
-                              usuario_id = %s, forma_pago = %s, medio_pago = %s, total = %s, fecha_emision = %s,
-                              cufe = %s, xml_sin_firmar = %s, ambiente = %s, xml_firmado = NULL,
-                              respuesta_dian = NULL, application_response = NULL, dian_track_id = NULL,
-                              error = NULL, actualizada_en = now()
-                       WHERE id = %s""",
-                    (clave, motivo, cliente_id, usuario_id, forma_pago, medio_pago, total_f, fecha,
-                     xml.cufe, xml_texto, config.software.ambiente, nota_id),
-                )  # fmt: skip
-                accion = "NOTA_REENVIADA"
+            # 7. Guardar la nota y encolar el envío. Las comprobaciones de arriba no cierran una carrera (otra
+            # operación que guarda la misma clave a la vez): la restricción única la detecta y se tipa aquí.
+            try:
+                if nota_id is None:
+                    nota_id = conn.execute(
+                        """INSERT INTO factura (clave_emision, tipo, referencia_id, motivo, cliente_id, usuario_id,
+                                                prefijo, consecutivo, forma_pago, medio_pago, total, fecha_emision,
+                                                cufe, xml_sin_firmar, ambiente)
+                           VALUES (%s, 'NOTA_CREDITO', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                           RETURNING id""",
+                        (clave, factura_id, motivo, cliente_id, usuario_id, prefijo, consecutivo, forma_pago,
+                         medio_pago, total_f, fecha, xml.cufe, xml_texto, config.software.ambiente),
+                    ).fetchone()[0]  # type: ignore[index]  # fmt: skip
+                    accion = "ANULACION_SOLICITADA"
+                else:
+                    conn.execute(
+                        """UPDATE factura SET clave_emision = %s, estado = 'EN_PROCESO', motivo = %s,
+                                  cliente_id = %s, usuario_id = %s, forma_pago = %s, medio_pago = %s, total = %s,
+                                  fecha_emision = %s, cufe = %s, xml_sin_firmar = %s, ambiente = %s,
+                                  xml_firmado = NULL, respuesta_dian = NULL, application_response = NULL,
+                                  dian_track_id = NULL, error = NULL, actualizada_en = now()
+                           WHERE id = %s""",
+                        (clave, motivo, cliente_id, usuario_id, forma_pago, medio_pago, total_f, fecha,
+                         xml.cufe, xml_texto, config.software.ambiente, nota_id),
+                    )  # fmt: skip
+                    accion = "NOTA_REENVIADA"
+            except errors.UniqueViolation as e:
+                restriccion = e.diag.constraint_name
+                if restriccion == _UNICA_CLAVE:
+                    raise ClaveReutilizada("la clave de emisión ya se usó para otra operación") from None
+                if restriccion in _UNICAS_NUMERO:
+                    raise _serie_desfasada(prefijo) from None
+                raise
             numero_nota = f"{prefijo}{consecutivo}"
             encolar(conn, nota_id, TipoTrabajo.ENVIAR_DIAN)
             # El motivo puede llevar datos personales: a la auditoría solo va su largo.

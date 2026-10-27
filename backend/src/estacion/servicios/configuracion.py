@@ -37,6 +37,17 @@ def _requerida(entorno: Mapping[str, str], nombre: str, faltan: list[str]) -> st
     return valor
 
 
+def exigir_ambiente(ambiente: str) -> str:
+    """El valor de DIAN_AMBIENTE si es uno permitido; si no, ConfiguracionIncompleta (vacío no es "otro ambiente")."""
+    if not ambiente:
+        raise ConfiguracionIncompleta("faltan variables de entorno de la DIAN: DIAN_AMBIENTE")
+    if ambiente not in AMBIENTES_PERMITIDOS:
+        raise ConfiguracionIncompleta(
+            f'DIAN_AMBIENTE={ambiente!r} no permitido: use producción ("1") o habilitación ("2")'
+        )
+    return ambiente
+
+
 def software_desde_entorno(entorno: Mapping[str, str], nit_emisor: str) -> SoftwareDian:
     faltan: list[str] = []
     ambiente = _requerida(entorno, "DIAN_AMBIENTE", faltan)
@@ -44,10 +55,7 @@ def software_desde_entorno(entorno: Mapping[str, str], nit_emisor: str) -> Softw
     pin = _requerida(entorno, "DIAN_SOFTWARE_PIN", faltan)
     if faltan:
         raise ConfiguracionIncompleta(f"faltan variables de entorno de la DIAN: {', '.join(faltan)}")
-    if ambiente not in AMBIENTES_PERMITIDOS:
-        raise ConfiguracionIncompleta(
-            f'DIAN_AMBIENTE={ambiente!r} no permitido: use producción ("1") o habilitación ("2")'
-        )
+    exigir_ambiente(ambiente)
     # Software propio: el proveedor tecnológico es la propia empresa (SIN VERIFICAR contra el anexo).
     return SoftwareDian(software_id=software_id, pin=pin, nit_proveedor=nit_emisor, ambiente=ambiente)
 

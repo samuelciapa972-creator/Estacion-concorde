@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import psycopg
 import pytest
+from psycopg_pool import PoolTimeout
 
 from conftest import ENTORNO_DIAN, clave
 from estacion.entrega.correo import EnviadorEnMemoria
@@ -166,3 +168,105 @@ def test_pdf_y_zip_de_la_nota(api, certificado):
     assert f"factura_{nota['numero']}.pdf" in pdf.headers["content-disposition"]
     zip_ = api.get(f"/facturas/{nota['id']}/zip", como=api.bombero)
     assert zip_.status_code == 200 and zip_.content.startswith(b"PK")
+
+
+@pytest.mark.parametrize("motivo", ["cliente\x0bequivocado", "nul\x00", "no carácter￿"])
+def test_motivo_con_caracteres_de_control_422(api, certificado, motivo):
+    # Pegado desde Word: el XML no los admite. Antes llegaban a lxml y salían como 500.
+    f = facturada(api, certificado)
+    r = anular(api, f["id"], motivo=motivo)
+    assert r.status_code == 422, r.text
+    assert api.e.datos.uno("SELECT count(*) FROM factura WHERE tipo = 'NOTA_CREDITO'") == 0
+
+
+def test_motivo_con_saltos_de_linea_se_acepta(api, certificado):
+    f = facturada(api, certificado)
+    assert anular(api, f["id"], motivo="línea 1\n\tlínea 2").status_code == 202
+
+
+def test_serie_de_notas_desfasada_503(api, certificado):
+    f1, f2 = facturada(api, certificado), facturada(api, certificado)
+    assert anular(api, f1["id"]).status_code == 202
+    api.e.datos.conn.execute("UPDATE numeracion_nota SET siguiente = 1")  # el contador quedó atrás de NCP1
+    r = anular(api, f2["id"])
+    assert r.status_code == 503, r.text
+    assert "la serie de notas NCP está desfasada" in r.json()["detail"]
+    assert api.e.datos.uno("SELECT siguiente FROM numeracion_nota") == 1  # no se gastó número
+    assert api.e.datos.uno("SELECT count(*) FROM factura WHERE tipo = 'NOTA_CREDITO'") == 1
+
+
+def test_clave_tomada_a_la_vez_por_otra_factura_409(api, certificado, monkeypatch):
+    import estacion.servicios.anulacion as modulo
+
+    otra, f = facturada(api, certificado), facturada(api, certificado)
+    k = clave()
+    original = modulo.construir_nota_credito
+
+    def con_carrera(*args, **kwargs):  # otra operación guarda la misma clave entre la comprobación y el INSERT
+        api.e.datos.conn.execute("UPDATE factura SET clave_emision = %s WHERE id = %s", (k, otra["id"]))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(modulo, "construir_nota_credito", con_carrera)
+    r = anular(api, f["id"], k=k)
+    assert r.status_code == 409, r.text
+    assert "clave de emisión ya se usó" in r.json()["detail"]
+    assert api.e.datos.uno("SELECT count(*) FROM factura WHERE tipo = 'NOTA_CREDITO'") == 0
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        psycopg.errors.DeadlockDetected("deadlock detected DETAIL: Process 123 waits for ShareLock on tx 456"),
+        psycopg.errors.QueryCanceled("canceling statement due to statement timeout"),
+        psycopg.OperationalError("connection to server at 10.0.0.5 failed"),
+        PoolTimeout("couldn't get a connection after 30.00 sec"),
+    ],
+    ids=["deadlock", "timeout", "conexion", "pool"],
+)
+def test_error_de_base_no_mapeado_503_sin_detalles(api, certificado, monkeypatch, error):
+    f = facturada(api, certificado)
+
+    def falla(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(api.cliente.app.state.anulacion, "solicitar", falla)
+    r = anular(api, f["id"])
+    assert r.status_code == 503, r.text
+    assert r.json()["detail"] == "la base de datos no está disponible en este momento: intente de nuevo"
+
+
+def test_configuracion_incompleta_503(armar, certificado):
+    api = armar()
+    f = facturada(api, certificado)
+    sin_pin = armar({k: v for k, v in ENTORNO_DIAN.items() if k != "DIAN_SOFTWARE_PIN"})
+    r = anular(sin_pin, f["id"])
+    assert r.status_code == 503, r.text
+    assert r.json()["detail"].startswith("no se puede facturar:") and "DIAN_SOFTWARE_PIN" in r.json()["detail"]
+    assert "12345" not in r.text  # ningún secreto en el mensaje
+    assert api.e.datos.uno("SELECT count(*) FROM factura WHERE tipo = 'NOTA_CREDITO'") == 0
+
+
+def test_sin_dian_ambiente_503_no_otro_ambiente(armar, certificado):
+    # DIAN_AMBIENTE vacío es un problema de configuración, no una factura "de otro ambiente".
+    api = armar()
+    f = facturada(api, certificado)
+    r = anular(armar({**ENTORNO_DIAN, "DIAN_AMBIENTE": ""}), f["id"])
+    assert r.status_code == 503, r.text
+    assert "DIAN_AMBIENTE" in r.json()["detail"] and "otro ambiente" not in r.json()["detail"]
+
+
+def test_nota_rechazada_vuelve_a_ser_anulable_y_reusa_el_numero(api, certificado):
+    f = facturada(api, certificado)
+    nota = anular(api, f["id"]).json()
+    # Como lo deja el worker ante un rechazo de la DIAN: la nota RECHAZADA y su trabajo terminado.
+    api.e.datos.conn.execute("UPDATE factura SET estado = 'RECHAZADO', error = 'x' WHERE id = %s", (nota["id"],))
+    api.e.datos.conn.execute("UPDATE outbox SET estado = 'HECHO', terminado_en = now() WHERE factura_id = %s",
+                             (nota["id"],))  # fmt: skip
+    factura = api.get(f"/facturas/{f['id']}", como=api.admin).json()
+    assert factura["anulable"] is True and factura["anulada_por"] is None
+
+    r = anular(api, f["id"], motivo="Motivo corregido")
+    assert r.status_code == 202, r.text
+    assert (r.json()["id"], r.json()["numero"], r.json()["estado"]) == (nota["id"], "NCP1", "EN_PROCESO")
+    assert api.e.datos.uno("SELECT count(*) FROM factura WHERE tipo = 'NOTA_CREDITO'") == 1
+    assert api.e.datos.uno("SELECT siguiente FROM numeracion_nota") == 2

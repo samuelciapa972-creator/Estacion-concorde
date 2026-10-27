@@ -298,3 +298,51 @@ def test_reenvio_con_prefijo_incorrecto_falla(escenario, conn, recursos):
     with pytest.raises(ConfiguracionIncompleta, match="prefijo NCE"):
         anular(escenario, conn, factura_id)
     assert escenario.datos.uno("SELECT estado FROM factura WHERE id = %s", (nota.id,)) == "RECHAZADO"
+
+
+@pytest.mark.parametrize("motivo", ["cliente\x0bequivocado", "nul\x00", "escape\x1b", "no carácter￾", "￿"])
+def test_motivo_con_caracteres_que_el_xml_no_admite(escenario, conn, recursos, motivo):
+    # Pegado desde Word (tabulación vertical, etc.): lxml no los acepta. Se rechaza antes de tocar la base.
+    factura_id = facturar(escenario, conn, recursos)
+    with pytest.raises(ValueError, match="caracteres no permitidos"):
+        anular(escenario, conn, factura_id, motivo=motivo)
+    assert contar(escenario, "factura", "tipo = 'NOTA_CREDITO'") == 0
+    assert siguiente_nota(escenario) is None
+
+
+def test_motivo_con_saltos_de_linea_y_tabulaciones_se_acepta(escenario, conn, recursos):
+    nota = anular(escenario, conn, facturar(escenario, conn, recursos), motivo="línea 1\n\tlínea 2\r\nfin")
+    assert nota.numero == "NCP1"
+
+
+def test_serie_de_notas_desfasada_falla_cerrado_sin_gastar_numero(escenario, conn, recursos):
+    primera, segunda = facturar(escenario, conn, recursos), facturar(escenario, conn, recursos)
+    assert anular(escenario, conn, primera).numero == "NCP1"
+    # El contador quedó atrás de las notas guardadas (restauración parcial, edición a mano): NCP1 ya existe.
+    escenario.datos.conn.execute("UPDATE numeracion_nota SET siguiente = 1")
+    with pytest.raises(ConfiguracionIncompleta, match="la serie de notas NCP está desfasada"):
+        anular(escenario, conn, segunda)
+    assert siguiente_nota(escenario) == 1
+    assert contar(escenario, "factura", "tipo = 'NOTA_CREDITO'") == 1
+
+
+def test_clave_tomada_por_otra_operacion_a_la_vez_es_clave_reutilizada(escenario, conn, recursos, monkeypatch):
+    # Carrera: entre la comprobación de la clave y el INSERT, otra operación guarda la misma clave. Aquí se
+    # simula dentro de la misma transacción (al construir el XML), y el INSERT choca con el índice de la clave.
+    import estacion.servicios.anulacion as modulo
+
+    otra = facturar(escenario, conn, recursos)
+    factura_id = facturar(escenario, conn, recursos)
+    k = uuid.uuid4().hex
+    original = modulo.construir_nota_credito
+
+    def con_carrera(*args, **kwargs):
+        conn.execute("UPDATE factura SET clave_emision = %s WHERE id = %s", (k, otra))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(modulo, "construir_nota_credito", con_carrera)
+    with pytest.raises(ClaveReutilizada):
+        anular(escenario, conn, factura_id, k=k)
+    assert siguiente_nota(escenario) is None
+    assert contar(escenario, "factura", "tipo = 'NOTA_CREDITO'") == 0
+    assert contar(escenario, "factura", f"clave_emision = '{k}'") == 0  # el rollback deshizo la "otra" también
