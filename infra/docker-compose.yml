@@ -2,7 +2,8 @@
 #   db      PostgreSQL 16
 #   migrar  aplica las migraciones (alembic upgrade head) y termina; la API y el worker esperan a que acabe
 #   api     FastAPI (no se publica: solo la ve Caddy)
-#   worker  cola de envíos con el proveedor SIMULADO (nada sale a la DIAN): firma, y entrega el ZIP por correo
+#   worker  cola de envíos con el proveedor SIMULADO (nada sale a la DIAN): firma, y entrega el ZIP por correo.
+#           Solo habilitación: con DIAN_AMBIENTE=1 no arranca (detenerlo antes de `make worker-dian`)
 #   mailpit buzón de PRUEBA: recibe los correos de las facturas (web en http://localhost:8025). Nada sale a internet
 #   web     Caddy: HTTPS local, la PWA y /api -> api
 #   simulador (perfil "simulador"): un despacho cada 20 s. `make stack-simulador`
@@ -75,6 +76,9 @@ services:
     command: ["python", "-m", "estacion.worker", "--proveedor", "simulado"]
     environment:
       <<: *entorno-backend
+      # El mismo ambiente que la API: la cola solo procesa documentos de SU ambiente. Con DIAN_AMBIENTE=1 este worker
+      # (simulado) no arranca, a propósito: en producción corre `make worker-dian` (ver docs/salida-a-produccion.md).
+      DIAN_AMBIENTE: ${DIAN_AMBIENTE:-2}
       # Certificado de firma: el de PRUEBA lo genera `make certificado` en datos/ (fuera de git). Sin él, las facturas
       # esperan en la cola sin enviarse (nunca se envía un documento sin firma).
       DIAN_CERTIFICADO_RUTA: /datos/certificado-prueba.pfx

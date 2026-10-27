@@ -1,7 +1,8 @@
 """Worker de la cola de envíos a la DIAN: `python -m estacion.worker [--una-vez] [--espera 2]`.
 
-Lee DATABASE_URL del entorno. `--proveedor simulado` (por defecto) no envía nada a la DIAN; `--proveedor dian` envía
-al ambiente que diga DIAN_AMBIENTE ("2" habilitación, "1" producción) y, en habilitación con DIAN_TEST_SET_ID,
+Lee DATABASE_URL y DIAN_AMBIENTE ("2" habilitación, "1" producción; sin él no arranca, tampoco con el simulado: la
+cola solo procesa documentos de SU ambiente). `--proveedor simulado` (por defecto) no envía nada a la DIAN;
+`--proveedor dian` envía al ambiente que diga DIAN_AMBIENTE y, en habilitación con DIAN_TEST_SET_ID,
 usa el set de pruebas (envío asíncrono). En producción se rechaza el proveedor simulado, DIAN_TEST_SET_ID y el
 certificado de prueba.
 Firma con DIAN_CERTIFICADO_RUTA / DIAN_CERTIFICADO_CLAVE (sin ellos no envía nada; las facturas esperan en la cola) y
@@ -33,17 +34,25 @@ from .servicios.outbox import Recursos, procesar_pendientes
 log = logging.getLogger("estacion.worker")
 
 
+def _ambiente(entorno: Mapping[str, str]) -> str:
+    ambiente = entorno.get("DIAN_AMBIENTE", "").strip()
+    if ambiente not in AMBIENTES_PERMITIDOS:
+        raise ConfiguracionIncompleta(
+            f'DIAN_AMBIENTE={ambiente!r} no permitido: use "1" (producción) o "2" (habilitación); el worker no '
+            "arranca sin él, ni con el proveedor simulado"
+        )
+    return ambiente
+
+
 def construir_proveedor(
     nombre: str, conn: psycopg.Connection[Any], entorno: Mapping[str, str], certificado: Certificado | None
 ) -> ProveedorFacturacion:
     """El proveedor que usa la cola. Con `dian`, falla cerrado si falta algo (mensajes sin secretos)."""
-    ambiente = entorno.get("DIAN_AMBIENTE", "").strip()
+    ambiente = _ambiente(entorno)
     if nombre == "simulado":
         if ambiente == "1":
             raise ConfiguracionIncompleta("en producción no se puede usar el proveedor simulado")
         return ProveedorSimulado()
-    if ambiente not in AMBIENTES_PERMITIDOS:
-        raise ConfiguracionIncompleta(f'DIAN_AMBIENTE={ambiente!r} no permitido: use "1" o "2"')
     if certificado is None:
         raise ConfiguracionIncompleta("sin certificado de firma no se puede hablar con la DIAN")
     test_set_id = entorno.get("DIAN_TEST_SET_ID", "").strip() or None
@@ -75,6 +84,11 @@ def main(argv: list[str] | None = None) -> int:
         log.error("falta la variable de entorno DATABASE_URL")
         return 2
     try:
+        ambiente = _ambiente(os.environ)
+    except ConfiguracionIncompleta as e:
+        log.error("%s", e)
+        return 2
+    try:
         enviador = enviador_desde_entorno()
     except ValueError as e:
         log.error("%s", e)
@@ -91,9 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     except FirmaError as e:  # el mensaje nunca lleva la clave
         error_certificado = str(e)
         log.error("sin certificado de firma (%s): las facturas esperan en la cola sin enviarse", e)
-    ambiente = os.environ.get("DIAN_AMBIENTE", "").strip()
-    # Sin ambiente válido el proveedor DIAN no arranca; con el simulado, lo que corresponde es el de habilitación.
-    recursos = Recursos(certificado, enviador, error_certificado, ambiente if ambiente in AMBIENTES_PERMITIDOS else "2")
+    recursos = Recursos(certificado, enviador, error_certificado, ambiente)
 
     with psycopg.connect(dsn, autocommit=True) as conn:
         try:
@@ -102,10 +114,10 @@ def main(argv: list[str] | None = None) -> int:
             log.error("%s", e)
             return 2
         if isinstance(proveedor, ProveedorDian):
-            nombre_ambiente = "PRODUCCIÓN" if os.environ.get("DIAN_AMBIENTE", "").strip() == "1" else "HABILITACIÓN"
+            nombre_ambiente = "PRODUCCIÓN" if ambiente == "1" else "HABILITACIÓN"
             log.warning("proveedor DIAN, ambiente de %s, modo %s", nombre_ambiente, proveedor.modo)
         else:
-            log.warning("proveedor SIMULADO: las facturas NO se envían a la DIAN")
+            log.warning("proveedor SIMULADO: las facturas NO se envían a la DIAN (ambiente %s)", ambiente)
         while True:
             try:
                 for hecho in procesar_pendientes(conn, proveedor, recursos=recursos):

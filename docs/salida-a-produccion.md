@@ -105,13 +105,19 @@ Qué hacer:
    Imprime una lista con ✔/✘ y sale con 0 solo si todo está ✔. No envía documentos. Revisa: variables DIAN, `DIAN_TEST_SET_ID` vacío,
    certificado vigente y no de prueba, una numeración activa del ambiente 1 (EDSC) y vigente, `GetNumberingRange` y prefijo, SMTP y cola sin documentos de habilitación.
    Si algo sale ✘, corregirlo y repetir. No seguir hasta que todo esté en ✔.
-7. Arrancar el worker contra producción: `make worker-dian` (es `python -m estacion.worker --proveedor dian`). En el registro debe aparecer
-   "proveedor DIAN, ambiente de PRODUCCIÓN". El proveedor simulado no arranca con `DIAN_AMBIENTE=1`.
-8. Emitir **una factura real de verificación** (venta real, cliente real). Confirmar:
+7. **Detener antes el worker simulado** del stack (`docker compose --project-directory . -f infra/docker-compose.yml stop worker`)
+   y cualquier `make worker` que siga abierto. Por qué: varios workers toman trabajos de la misma cola, y uno de habilitación
+   tomaría trabajos de producción. Ya no los entrega (los deja FALLIDO con `AMBIENTE_NO_COINCIDE` y habría que reenviarlos a
+   mano), y con `DIAN_AMBIENTE=1` el worker simulado ni arranca (el del stack queda reiniciándose con ese error). Comprobar con
+   `docker compose --project-directory . -f infra/docker-compose.yml ps worker` que no está corriendo.
+8. Arrancar el worker contra producción: `make worker-dian` (es `python -m estacion.worker --proveedor dian`). En el registro debe aparecer
+   "proveedor DIAN, ambiente de PRODUCCIÓN". El proveedor simulado no arranca con `DIAN_AMBIENTE=1`, y ningún worker arranca sin
+   `DIAN_AMBIENTE` válido.
+9. Emitir **una factura real de verificación** (venta real, cliente real). Confirmar:
    - que la DIAN la acepta (estado FACTURADO en Facturación);
    - que el QR abre en el catálogo de producción (catalogo-vpfe);
    - que llega el correo con el ZIP y que el PDF no dice "SIN VALIDEZ FISCAL / AMBIENTE DE PRUEBAS".
-9. Si algo sale mal en esa factura, anularla (sección 4). No reutilizar el número anulado.
+10. Si algo sale mal en esa factura, anularla (sección 4). No reutilizar el número anulado.
 
 ### 3.1 La clave técnica
 

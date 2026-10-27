@@ -30,8 +30,11 @@ puede corregir) y solo al agotarla queda FALLIDO. Al quedar FACTURADA se guarda 
 (`application_response`) y se encola ENVIAR_CORREO, en la misma transacción.
 
 Una factura de OTRO ambiente que el del worker (`factura.ambiente` vs `Recursos.ambiente`; p. ej. una de habilitación
-que quedó en la cola al pasar a producción) NO se firma, ni se envía, ni se consulta: el trabajo queda FALLIDO con el
-motivo y se audita (`AMBIENTE_NO_COINCIDE`). No se reintenta: el ambiente de la factura no cambia solo.
+que quedó en la cola al pasar a producción) NO se firma, ni se envía, ni se consulta, ni se ENTREGA por correo: el
+trabajo queda FALLIDO con el motivo y se audita (`AMBIENTE_NO_COINCIDE`). No se reintenta: el ambiente de la factura
+no cambia solo. La entrega también: un worker de habilitación firmaría el contenedor de un documento de producción con
+su certificado de prueba, y uno de producción mandaría al cliente un documento de prueba. Aparte, un documento de
+producción nunca se arma con un certificado de prueba (ENTREGA_NO_ARMADA), aunque el worker esté mal configurado.
 
 Resultados de ENVIAR_CORREO (entrega al cliente, ver `facturacion/paquete.py`):
     primera vez     -> arma el ZIP (AttachedDocument firmado + PDF) y lo guarda en `entrega`; los reintentos y los
@@ -55,7 +58,7 @@ from psycopg.types.json import Jsonb
 from ..entrega.correo import CorreoRechazado, CorreoTemporal, EnviadorCorreo, mensaje_factura
 from ..facturacion import paquete
 from ..facturacion.attached import AttachedInvalido
-from ..facturacion.firma import Certificado, FirmaError, firmar_xml
+from ..facturacion.firma import Certificado, FirmaError, es_certificado_de_prueba, firmar_xml
 from ..facturacion.modelos import (
     EnvioPendiente,
     EstadoEntrega,
@@ -169,10 +172,8 @@ def _procesar_uno(
         armado = False
         try:
             with conn.transaction():  # punto de guardado: un error inesperado deshace SOLO este paso
-                if tipo in (TipoTrabajo.ENVIAR_DIAN, TipoTrabajo.CONSULTAR_DIAN) and _ambiente_ajeno(
-                    conn, trabajo_id, factura, recursos
-                ):
-                    estado = factura.estado  # ni se firma, ni se envía, ni se consulta: queda FALLIDO
+                if _ambiente_ajeno(conn, trabajo_id, factura, recursos):
+                    estado = factura.estado  # ni se firma, ni se envía, ni se consulta, ni se entrega: FALLIDO
                 elif tipo == TipoTrabajo.ENVIAR_DIAN:
                     estado = _enviar(conn, proveedor, politica, trabajo_id, intentos, factura, recursos)
                 elif tipo == TipoTrabajo.ENVIAR_CORREO:
@@ -461,6 +462,12 @@ def _armar_entrega(conn: Conexion, f: _Factura, recursos: Recursos) -> entrega.E
     if recursos.certificado is None:
         motivo = recursos.error_certificado or "no hay certificado de firma"
         return _NoArmada(f"no se puede firmar el contenedor: {motivo}", recuperable=True)
+    if f.ambiente == "1" and es_certificado_de_prueba(recursos.certificado):  # antes de gastar consecutivo
+        return _NoArmada(
+            "en producción no se firma el contenedor con un certificado de prueba: configure el de la empresa y "
+            "use reenviar",
+            recuperable=False,
+        )
     ahora = ahora_local().replace(microsecond=0)
     consecutivo = entrega.reservar_consecutivo(conn, ahora.year)
     try:

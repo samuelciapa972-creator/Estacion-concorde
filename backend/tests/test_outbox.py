@@ -228,6 +228,7 @@ def test_worker_una_vez(escenario, conn, monkeypatch, tmp_path, certificado):
     monkeypatch.setenv("DIAN_CERTIFICADO_CLAVE", "clave-de-prueba")
     monkeypatch.setenv("ESTACION_SMTP_HOST", "127.0.0.1")
     monkeypatch.setenv("ESTACION_SMTP_PUERTO", "1")  # sin servidor de correo: la entrega queda reintentando
+    monkeypatch.setenv("DIAN_AMBIENTE", "2")
     assert worker.main(["--una-vez"]) == 0
     assert factura(escenario, f.id)[0] == "FACTURADO" and origen_estado(escenario, origen) == "FACTURADO"
     assert cola(escenario, f.id)[-1] == ("ENVIAR_CORREO", "PENDIENTE", 1)
@@ -238,9 +239,44 @@ def test_worker_sin_certificado_no_envia(escenario, conn, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", escenario.datos.bd.dsn)
     monkeypatch.delenv("DIAN_CERTIFICADO_RUTA", raising=False)
     monkeypatch.delenv("DIAN_CERTIFICADO_CLAVE", raising=False)
+    monkeypatch.setenv("DIAN_AMBIENTE", "2")
     assert worker.main(["--una-vez"]) == 0
     assert factura(escenario, f.id)[0] == "EN_PROCESO"
     assert cola(escenario, f.id) == [("ENVIAR_DIAN", "PENDIENTE", 1)]
+
+
+@pytest.mark.parametrize("ambiente", [None, "", "3", "produccion"])
+@pytest.mark.parametrize("proveedor", ["simulado", "dian"])
+def test_worker_sin_dian_ambiente_valido_no_arranca(escenario, monkeypatch, caplog, ambiente, proveedor):
+    # Tampoco con el simulado: con un ambiente supuesto entregaría por correo documentos de otro ambiente.
+    monkeypatch.setenv("DATABASE_URL", escenario.datos.bd.dsn)
+    if ambiente is None:
+        monkeypatch.delenv("DIAN_AMBIENTE", raising=False)
+    else:
+        monkeypatch.setenv("DIAN_AMBIENTE", ambiente)
+    llamado = []
+    monkeypatch.setattr(worker, "procesar_pendientes", lambda *a, **k: llamado.append(1) or [])
+    assert worker.main(["--una-vez", "--proveedor", proveedor]) == 2
+    assert llamado == []
+    assert "DIAN_AMBIENTE" in caplog.text
+
+
+@pytest.mark.parametrize(("ambiente", "proveedor"), [("2", "simulado"), ("2", "dian"), ("1", "dian")])
+def test_worker_pasa_dian_ambiente_a_los_recursos(
+    escenario, monkeypatch, tmp_path, certificado_real, ambiente, proveedor
+):  # fmt: skip
+    from estacion.facturacion.certificado_prueba import guardar_pfx
+
+    guardar_pfx(certificado_real, tmp_path / "c.pfx", "clave-de-prueba")
+    monkeypatch.setenv("DATABASE_URL", escenario.datos.bd.dsn)
+    monkeypatch.setenv("DIAN_CERTIFICADO_RUTA", str(tmp_path / "c.pfx"))
+    monkeypatch.setenv("DIAN_CERTIFICADO_CLAVE", "clave-de-prueba")
+    monkeypatch.setenv("DIAN_AMBIENTE", ambiente)
+    monkeypatch.delenv("DIAN_TEST_SET_ID", raising=False)
+    vistos = []
+    monkeypatch.setattr(worker, "procesar_pendientes", lambda *a, recursos, **k: vistos.append(recursos) or [])
+    assert worker.main(["--una-vez", "--proveedor", proveedor]) == 0
+    assert [r.ambiente for r in vistos] == [ambiente]
 
 
 def test_worker_sin_database_url(monkeypatch):
@@ -339,6 +375,9 @@ def test_construir_proveedor_dian(escenario, conn, certificado):
     with pytest.raises(ConfiguracionIncompleta, match="certificado"):
         worker.construir_proveedor("dian", conn, entorno, None)
     assert isinstance(worker.construir_proveedor("simulado", conn, entorno, None), ProveedorSimulado)
+    for malo in ("", "3"):
+        with pytest.raises(ConfiguracionIncompleta, match="DIAN_AMBIENTE"):
+            worker.construir_proveedor("simulado", conn, {**entorno, "DIAN_AMBIENTE": malo}, None)
 
 
 ENTORNO_PRODUCCION = {**ENTORNO_DIAN, "DIAN_AMBIENTE": "1"}

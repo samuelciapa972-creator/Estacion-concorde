@@ -233,3 +233,43 @@ def test_el_zip_queda_guardado_antes_de_enviar(escenario, conn, certificado):
     otro = EnviadorEnMemoria()
     procesar_pendientes(conn, ProveedorSimulado(), recursos=Recursos(certificado, otro))
     assert otro.enviados[0].adjunto == e.enviados[0].adjunto  # el reintento no arma otro ZIP
+
+
+def _facturada_con_correo_pendiente(escenario, conn, certificado, *, ambiente: str):
+    """Una factura FACTURADA con su ENVIAR_CORREO pendiente, marcada del `ambiente` dado."""
+    f, _ = solicitar(escenario, conn)
+    procesar_siguiente(conn, ProveedorSimulado(), recursos=Recursos(certificado, EnviadorEnMemoria()))  # FACTURADO
+    escenario.datos.conn.execute("UPDATE factura SET ambiente = %s WHERE id = %s", (ambiente, f.id))
+    assert cola(escenario, f.id)[-1] == ("ENVIAR_CORREO", "PENDIENTE", 0)
+    return f
+
+
+def test_produccion_con_certificado_de_prueba_no_arma_ni_envia(escenario, conn, certificado):
+    # Un documento de producción no sale al cliente con el contenedor firmado por un certificado de prueba.
+    f = _facturada_con_correo_pendiente(escenario, conn, certificado, ambiente="1")
+    e = EnviadorEnMemoria()
+    procesar_pendientes(conn, ProveedorSimulado(), recursos=Recursos(certificado, e, ambiente="1"))
+
+    assert e.enviados == [] and entrega(escenario, f.id) is None
+    assert cola(escenario, f.id)[-1] == ("ENVIAR_CORREO", "FALLIDO", 1)  # sin reintentos en bucle
+    error = escenario.datos.uno("SELECT ultimo_error FROM outbox WHERE factura_id = %s AND tipo = 'ENVIAR_CORREO'",
+                                (f.id,))  # fmt: skip
+    assert "certificado de prueba" in error and "producción" in error
+    assert acciones(escenario, f.id)[-1] == "ENTREGA_NO_ARMADA"
+    assert escenario.datos.uno("SELECT count(*) FROM entrega_consecutivo") == 0  # no se gastó consecutivo
+
+
+@pytest.mark.parametrize(("documento", "worker"), [("1", "2"), ("2", "1")])
+def test_correo_de_otro_ambiente_no_se_entrega(escenario, conn, certificado, documento, worker):
+    # Un worker de habilitación no entrega documentos de producción (firmaría el contenedor con su certificado de
+    # prueba) y uno de producción no manda al cliente documentos de habilitación: FALLIDO y auditado.
+    f = _facturada_con_correo_pendiente(escenario, conn, certificado, ambiente=documento)
+    e = EnviadorEnMemoria()
+    procesar_pendientes(conn, ProveedorSimulado(), recursos=Recursos(certificado, e, ambiente=worker))
+
+    assert e.enviados == [] and entrega(escenario, f.id) is None
+    assert cola(escenario, f.id)[-1] == ("ENVIAR_CORREO", "FALLIDO", 1)
+    error = escenario.datos.uno("SELECT ultimo_error FROM outbox WHERE factura_id = %s AND tipo = 'ENVIAR_CORREO'",
+                                (f.id,))  # fmt: skip
+    assert f"ambiente {documento}" in error and f"ambiente {worker}" in error
+    assert acciones(escenario, f.id)[-1] == "AMBIENTE_NO_COINCIDE"

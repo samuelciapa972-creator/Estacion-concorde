@@ -98,10 +98,10 @@ format:
 simulador:
 	cd $(BACK) && $(PY) -m estacion.simulador --cada 20s
 
+# Leen DIAN_* y DIAN_CERTIFICADO_* del .env (si existe). El worker no arranca sin DIAN_AMBIENTE válido.
 worker:
-	cd $(BACK) && $(PY) -m estacion.worker
+	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.worker
 
-# Leen DIAN_* y DIAN_CERTIFICADO_* del .env (si existe).
 worker-dian:
 	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.worker --proveedor dian
 
