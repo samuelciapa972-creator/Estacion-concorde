@@ -26,7 +26,7 @@ from .servicios._bd import auditar
 def _leer_pin(desde_stdin: bool) -> str:
     if desde_stdin:
         return sys.stdin.readline().strip()
-    pin = getpass.getpass("PIN (4 a 8 dígitos): ")
+    pin = getpass.getpass("PIN (4 a 10 dígitos): ")
     if getpass.getpass("Repita el PIN: ") != pin:
         raise PinInvalido("los dos PIN no coinciden")
     return pin

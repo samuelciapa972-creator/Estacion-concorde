@@ -25,12 +25,12 @@ from ..servicios._bd import Conexion, auditar, exigir_autocommit
 from .ajustes import Ajustes
 
 ALGORITMO = "HS256"
-_PIN = re.compile(r"^[0-9]{4,8}$")
+_PIN = re.compile(r"^[0-9]{4,10}$")  # hasta 10: los bomberos usan su cédula, como en Nexus
 _hasher = PasswordHasher()  # argon2id con los parámetros recomendados por la librería
 
 
 class PinInvalido(ValueError):
-    """El PIN no cumple el formato (4 a 8 dígitos)."""
+    """El PIN no cumple el formato (4 a 10 dígitos)."""
 
 
 class CredencialesInvalidas(Exception):
@@ -57,7 +57,7 @@ class Sesion:
 
 def hash_pin(pin: str) -> str:
     if not _PIN.match(pin):
-        raise PinInvalido("el PIN debe tener entre 4 y 8 dígitos")
+        raise PinInvalido("el PIN debe tener entre 4 y 10 dígitos")
     return _hasher.hash(pin)
 
 

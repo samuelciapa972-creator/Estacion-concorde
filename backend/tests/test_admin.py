@@ -106,6 +106,14 @@ def test_crear_usuario_y_entrar(api):
     assert api.cliente.post("/auth/login", json={"usuario": "bombero.nuevo", "pin": "2468"}).status_code == 200
 
 
+def test_pin_de_10_digitos_como_la_cedula_del_bombero(api):
+    datos = {"usuario": "1000000017", "nombre": "Bombero Cedula", "rol": "BOMBERO", "pin": "1000000017"}
+    assert api.post("/usuarios", datos, como=api.admin).status_code == 201
+    assert api.cliente.post("/auth/login", json={"usuario": "1000000017", "pin": "1000000017"}).status_code == 200
+    largo = api.post("/usuarios", {**datos, "usuario": "otro", "pin": "12345678901"}, como=api.admin)
+    assert largo.status_code == 422  # 11 dígitos: no
+
+
 def test_crear_usuario_errores(api):
     base = {"usuario": "cajero1", "nombre": "Cajero Uno", "rol": "BOMBERO", "pin": "1357"}
     assert api.post("/usuarios", base, como=api.admin).status_code == 201

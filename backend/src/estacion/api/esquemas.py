@@ -43,7 +43,7 @@ class Error(BaseModel):
 # ------------------------------------------------------------------------------------------ sesión
 class LoginEntrada(Esquema):
     usuario: str = Field(min_length=3, max_length=40, examples=["bombero1"])
-    pin: str = Field(min_length=4, max_length=8, examples=["1234"])
+    pin: str = Field(min_length=4, max_length=10, examples=["1234"])
 
 
 class UsuarioSalida(BaseModel):
@@ -330,7 +330,7 @@ class UsuarioEntrada(Esquema):
     usuario: str = Field(min_length=3, max_length=40, description="se guarda en minúsculas", examples=["bombero2"])
     nombre: str = Field(min_length=1, max_length=200)
     rol: Rol = "BOMBERO"
-    pin: str = Field(min_length=4, max_length=8, description="4 a 8 dígitos; se guarda solo su hash")
+    pin: str = Field(min_length=4, max_length=10, description="4 a 10 dígitos; se guarda solo su hash")
 
 
 class UsuarioListadoSalida(BaseModel):

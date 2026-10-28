@@ -1054,7 +1054,7 @@
             "examples": [
               "1234"
             ],
-            "maxLength": 8,
+            "maxLength": 10,
             "minLength": 4,
             "title": "Pin",
             "type": "string"
@@ -1496,8 +1496,8 @@
             "type": "string"
           },
           "pin": {
-            "description": "4 a 8 dígitos; se guarda solo su hash",
-            "maxLength": 8,
+            "description": "4 a 10 dígitos; se guarda solo su hash",
+            "maxLength": 10,
             "minLength": 4,
             "title": "Pin",
             "type": "string"
