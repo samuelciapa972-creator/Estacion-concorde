@@ -1,7 +1,9 @@
 /** Tipos de documento y dígito de verificación. Espejo de `facturacion/documentos.py`; la validación que vale es
  * la de la API, esto solo ayuda a digitar. */
 
-export const TIPOS_DOCUMENTO = ['CC', 'NIT', 'CE', 'PA', 'PPT', 'NIT_EXTERIOR'];
+// Solo los que la factura electrónica sabe armar hoy (`facturacion/xml_factura.py`); los demás se agregan cuando
+// la DIAN los valide en habilitación. NOMBRE_TIPO conserva todos para mostrar clientes ya registrados.
+export const TIPOS_DOCUMENTO = ['CC', 'NIT'];
 
 export const NOMBRE_TIPO = {
   CC: 'Cédula de ciudadanía',
