@@ -1769,6 +1769,22 @@
             "title": "Lado",
             "type": "string"
           },
+          "placa": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "opcional: a un particular no se le pide",
+            "examples": [
+              "GZY858"
+            ],
+            "title": "Placa"
+          },
           "ppu": {
             "anyOf": [
               {
@@ -2747,7 +2763,7 @@
             "name": "forma_pago",
             "required": false,
             "schema": {
-              "default": "CONTADO",
+              "default": "TODAS",
               "enum": [
                 "CONTADO",
                 "CREDITO",

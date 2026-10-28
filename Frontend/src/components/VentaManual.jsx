@@ -6,11 +6,11 @@ import { estilos } from './estilos';
 
 /**
  * Modo manual: el bombero digita lo que marcó el surtidor (respaldo mientras no hay captura automática).
- * Al guardar una venta de contado pasa directo a facturarla; una a crédito solo se registra.
+ * Al guardar pasa directo a facturarla, de contado o a crédito. La placa es opcional: a un particular no se le pide.
  */
 export default function VentaManual({ onCancelar, onGuardada }) {
   const [catalogos, setCatalogos] = useState({ surtidores: [], productos: [] });
-  const [d, setD] = useState({ surtidor_id: '', lado: '', producto: '', forma_pago: 'CONTADO', volumen: '', valor: '' });
+  const [d, setD] = useState({ surtidor_id: '', lado: '', producto: '', forma_pago: 'CONTADO', volumen: '', valor: '', placa: '' });
   const [errores, setErrores] = useState({});
   const [error, setError] = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -36,10 +36,11 @@ export default function VentaManual({ onCancelar, onGuardada }) {
     setGuardando(true);
     setError(null);
     try {
-      const datos = { surtidor_id: Number(d.surtidor_id), lado: d.lado, producto: d.producto, volumen: vol, valor: val, forma_pago: d.forma_pago };
+      const placa = d.placa.toUpperCase().replace(/[\s.-]/g, '') || null;
+      const datos = { surtidor_id: Number(d.surtidor_id), lado: d.lado, producto: d.producto, volumen: vol, valor: val, forma_pago: d.forma_pago, placa };
       const { id } = await api.crearVentaManual(datos);
       const surtidor = catalogos.surtidores.find((s) => s.id === datos.surtidor_id)?.marca || `#${datos.surtidor_id}`;
-      onGuardada({ ...datos, origen_tipo: 'venta_manual', origen_id: id, surtidor, ppu: null, placa: null });
+      onGuardada({ ...datos, origen_tipo: 'venta_manual', origen_id: id, surtidor, ppu: null });
     } catch (err) {
       setError(err);
     } finally {
@@ -89,8 +90,11 @@ export default function VentaManual({ onCancelar, onGuardada }) {
           <Campo etiqueta="Forma de pago" id="vm_pago">
             <select id="vm_pago" value={d.forma_pago} onChange={cambiar('forma_pago')} style={estilos.entrada}>
               <option value="CONTADO">Contado</option>
-              <option value="CREDITO">Crédito (solo se registra; no se factura aquí)</option>
+              <option value="CREDITO">Crédito</option>
             </select>
+          </Campo>
+          <Campo etiqueta="Placa (opcional)" id="vm_placa" ayuda="Déjela vacía si el cliente no la da">
+            <input id="vm_placa" autoComplete="off" autoCapitalize="characters" maxLength={20} value={d.placa} onChange={cambiar('placa')} style={estilos.entrada} />
           </Campo>
           <Campo etiqueta="Galones" id="vm_volumen" error={errores.volumen} ayuda="Como lo marca el surtidor, con 3 decimales">
             <input id="vm_volumen" inputMode="decimal" autoComplete="off" value={d.volumen} onChange={cambiar('volumen')} style={estilos.entrada} />
@@ -109,7 +113,7 @@ export default function VentaManual({ onCancelar, onGuardada }) {
             Cancelar
           </Boton>
           <Boton type="submit" disabled={guardando} style={{ flex: 1, padding: '12px' }}>
-            {guardando ? 'Guardando…' : d.forma_pago === 'CONTADO' ? 'Guardar y facturar' : 'Guardar'}
+            {guardando ? 'Guardando…' : 'Guardar y facturar'}
           </Boton>
         </div>
       </form>

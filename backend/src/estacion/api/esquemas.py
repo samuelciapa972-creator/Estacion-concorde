@@ -103,6 +103,9 @@ class VentaManualEntrada(Esquema):
     valor: Pesos
     ppu: Precio | None = None
     forma_pago: Literal["CONTADO", "CREDITO"] = "CONTADO"
+    placa: str | None = Field(
+        default=None, max_length=20, examples=["GZY858"], description="opcional: a un particular no se le pide"
+    )
 
 
 class Creado(BaseModel):

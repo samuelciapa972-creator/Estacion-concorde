@@ -28,7 +28,7 @@ pytestmark = pytest.mark.bd
 
 # ------------------------------------------------------------------------------------------ arranque y salud
 def test_salud(api):
-    assert api.get("/salud").json() == {"estado": "ok", "base_de_datos": "ok", "migracion": "0007"}
+    assert api.get("/salud").json() == {"estado": "ok", "base_de_datos": "ok", "migracion": "0008"}
 
 
 def test_salud_con_la_base_sin_migraciones(esquema_vacio):
@@ -159,6 +159,21 @@ def test_venta_manual_por_api(api):
     ]
     usuario = api.e.datos.uno("SELECT usuario_id FROM venta_manual WHERE id = %s", (r.json()["id"],))
     assert usuario == api.e.datos.uno("SELECT id FROM usuario WHERE usuario = %s", (api.bombero,))
+
+
+def test_venta_manual_a_credito_con_placa_se_factura_y_la_placa_sale_en_el_recibo(api, recursos):
+    api.e.datos.despacho()
+    surtidor = api.e.datos.uno("SELECT id FROM surtidor")
+    venta = {"surtidor_id": surtidor, "lado": "B", "producto": "diesel", "volumen": "3.120", "valor": "49889",
+             "forma_pago": "CREDITO", "placa": "gzy 858"}  # fmt: skip
+    r = api.post("/ventas-manuales", venta, api.bombero)
+    (p,) = api.get("/despachos/pendientes?lado=B", api.bombero).json()  # el crédito también se ve en la pista
+    assert (p["origen_id"], p["forma_pago"], p["placa"]) == (r.json()["id"], "CREDITO", "GZY858")
+    cliente = api.post("/clientes", empresa(), api.bombero).json()
+    f = pedir_factura(api, 0, origen_tipo="venta_manual", origen_id=r.json()["id"], cliente_id=cliente["id"]).json()
+    procesar_pendientes(api.e.datos.conn, ProveedorSimulado(), recursos=recursos)
+    recibo = api.get(f"/facturas/{f['id']}/recibo", api.bombero).content
+    assert b"Placa: GZY858\n" in recibo and b"Forma de pago: Credito\n" in recibo
 
 
 @pytest.mark.parametrize(
@@ -344,7 +359,8 @@ def test_recibo_termico_de_una_empresa_con_su_placa_y_queda_en_la_auditoria(api,
     cliente = api.post("/clientes", empresa(), api.bombero).json()
     despacho = api.e.datos.despacho()
     api.e.datos.conn.execute(
-        "UPDATE despacho SET placa_raw = 'gzy858', placa_tipo = 'PLACA' WHERE id = %s", (despacho,)
+        "UPDATE despacho SET placa_raw = 'gzy858', placa_tipo = 'PLACA', ref_vehiculo = 'GZY858' WHERE id = %s",
+        (despacho,),
     )
     f = pedir_factura(api, despacho, cliente_id=cliente["id"]).json()
     assert api.get(f"/facturas/{f['id']}/recibo", api.bombero).status_code == 409  # todavía EN_PROCESO

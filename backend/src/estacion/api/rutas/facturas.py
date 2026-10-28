@@ -173,20 +173,18 @@ def pdf(factura_id: int, conn: Conn, sesion: SesionActual) -> Response:
 
 
 def _placa(conn: Conn, factura_id: int) -> str | None:
-    """La placa del despacho, tal como la digitó el operador. Una nota la toma de la factura que anula; una venta
-    manual solo la tiene si ya se cruzó con su despacho."""
+    """La placa normalizada del despacho o, en una venta manual, la que digitó el bombero (opcional). Una nota la
+    toma de la factura que anula."""
     fila = conn.execute(
-        """SELECT d.placa_raw, d.placa_tipo
+        """SELECT coalesce(d.ref_vehiculo, v.placa)
            FROM factura f
            LEFT JOIN factura r ON r.id = f.referencia_id
            LEFT JOIN venta_manual v ON v.id = coalesce(f.venta_manual_id, r.venta_manual_id)
-           JOIN despacho d ON d.id = coalesce(f.despacho_id, r.despacho_id, v.despacho_id)
+           LEFT JOIN despacho d ON d.id = coalesce(f.despacho_id, r.despacho_id, v.despacho_id)
            WHERE f.id = %s""",
         (factura_id,),
     ).fetchone()
-    if fila is None or fila[1] == "SIN_PLACA" or not fila[0].strip():
-        return None
-    return str(fila[0]).strip().upper()
+    return None if fila is None or not fila[0] else str(fila[0])
 
 
 @router.get(

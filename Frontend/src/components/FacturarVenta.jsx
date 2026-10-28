@@ -27,6 +27,7 @@ export default function FacturarVenta({ venta, onTerminar }) {
           <span className="display__etiqueta">
             {venta.surtidor} · lado {venta.lado} · {oracion(venta.producto)}
             {venta.origen_tipo === 'venta_manual' && ' · venta manual'}
+            {venta.forma_pago === 'CREDITO' && ' · crédito'}
           </span>
           <span className="display__monto">
             <Rodillo texto={pesos(venta.valor)} />
@@ -334,6 +335,7 @@ function Emision({ venta, cliente, medio, onAtras, onEmitida, onTerminar }) {
         {fila('Producto', `${venta.producto} · Lado ${venta.lado}`)}
         {fila('Galones', galones(venta.volumen))}
         {venta.ppu && fila('Precio por galón', pesos(venta.ppu))}
+        {fila('Forma de pago', venta.forma_pago === 'CREDITO' ? 'Crédito' : 'Contado')}
         {fila('Medio de pago', medio === 'EFECTIVO' ? 'Efectivo' : 'Tarjeta')}
         {fila('Total', pesos(venta.valor), true)}
       </dl>

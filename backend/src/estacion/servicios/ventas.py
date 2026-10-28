@@ -22,6 +22,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from ..calidad import TOLERANCIA_TOTALIZADOR, TOLERANCIA_VALOR
+from ..normalizacion import normalizar_placa
 from ._bd import Conexion, ahora_local, auditar, exigir_autocommit
 from .emision import Origen
 
@@ -84,9 +85,11 @@ def registrar_venta_manual(
     valor: Decimal,
     ppu: Decimal | None = None,
     forma_pago: str = "CONTADO",
+    placa: str | None = None,
     reloj: Callable[[], datetime] = ahora_local,
 ) -> int:
-    """Guarda la venta que digitó el bombero y devuelve su id. Sin `ppu`, se calcula como valor / galones."""
+    """Guarda la venta que digitó el bombero y devuelve su id. Sin `ppu`, se calcula como valor / galones.
+    `placa` es opcional (a un particular no se le pide); se normaliza como la del surtidor."""
     exigir_autocommit(conn)
     lado = lado.strip().upper()
     producto = producto.strip().upper()
@@ -95,6 +98,9 @@ def registrar_venta_manual(
         problemas.append(f"lado inválido: {lado!r}")
     if forma_pago not in FORMAS_DE_PAGO:
         problemas.append(f"forma de pago inválida: {forma_pago!r}")
+    _, placa_normalizada = normalizar_placa(placa)
+    if placa_normalizada is not None and len(placa_normalizada) > 20:
+        problemas.append("la placa no puede tener más de 20 caracteres")
     if problemas:
         raise VentaInvalida("; ".join(problemas))
     if ppu is None:
@@ -110,9 +116,20 @@ def registrar_venta_manual(
             raise VentaInvalida(f"producto desconocido: {producto!r}")
         venta_id: int = conn.execute(
             """INSERT INTO venta_manual (surtidor_id, lado, producto_id, volumen, valor, ppu, forma_pago,
-                                         usuario_id, registrada_en)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-            (surtidor_id, lado, fila[0], volumen, valor, ppu, forma_pago, usuario_id, reloj().replace(microsecond=0)),
+                                         usuario_id, registrada_en, placa)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+            (
+                surtidor_id,
+                lado,
+                fila[0],
+                volumen,
+                valor,
+                ppu,
+                forma_pago,
+                usuario_id,
+                reloj().replace(microsecond=0),
+                placa_normalizada,
+            ),
         ).fetchone()[0]  # type: ignore[index]
         auditar(
             conn,
@@ -132,12 +149,13 @@ def listar_pendientes(
     surtidor_id: int | None = None,
     lado: str | None = None,
     desde: datetime | None = None,
-    forma_pago: str | None = "CONTADO",
+    forma_pago: str | None = None,
     limite: int = 50,
 ) -> list[VentaPendiente]:
     """Despachos y ventas manuales PENDIENTES de facturar, los más recientes primero.
 
-    Por defecto solo contado (el crédito de flota es una etapa posterior); `forma_pago=None` trae todas.
+    Contado y crédito (`forma_pago` filtra una sola). Nunca trae la forma de pago OTRO del surtidor: la factura no
+    sabe armarla (`xml_factura._FORMA_PAGO_DIAN`) y el bombero no podría emitirla.
     """
     filas = conn.execute(
         """SELECT * FROM (
@@ -147,13 +165,14 @@ def listar_pendientes(
                WHERE d.estado_facturacion = 'PENDIENTE'
                UNION ALL
                SELECT 'venta_manual', v.id, v.surtidor_id, v.lado, p.codigo, v.volumen, v.valor, v.ppu,
-                      v.forma_pago, v.registrada_en, NULL
+                      v.forma_pago, v.registrada_en, v.placa
                FROM venta_manual v JOIN producto p ON p.id = v.producto_id
                WHERE v.estado_facturacion = 'PENDIENTE'
            ) x
            WHERE (%(s)s::smallint IS NULL OR x.surtidor_id = %(s)s)
              AND (%(l)s::text IS NULL OR x.lado = %(l)s)
              AND (%(d)s::timestamp IS NULL OR x.fecha >= %(d)s)
+             AND x.forma_pago IN ('CONTADO', 'CREDITO')
              AND (%(f)s::text IS NULL OR x.forma_pago = %(f)s)
            ORDER BY x.fecha DESC, x.tipo, x.id DESC
            LIMIT %(n)s""",

@@ -106,18 +106,34 @@ def test_pendientes_incluye_despachos_y_ventas_manuales_y_filtra(escenario, conn
     credito = escenario.datos.venta_manual(escenario.usuario, forma_pago="CREDITO")
 
     todos = listar_pendientes(conn)
-    assert [p.origen for p in todos][:1] == [Origen("venta_manual", venta)]  # el más reciente primero
+    contado = listar_pendientes(conn, forma_pago="CONTADO")
+    assert [p.origen for p in contado][:1] == [Origen("venta_manual", venta)]  # el más reciente primero
     assert Origen("despacho", despacho) in {p.origen for p in todos}
-    assert Origen("venta_manual", credito) not in {p.origen for p in todos}  # solo contado por defecto
-    assert Origen("venta_manual", credito) in {p.origen for p in listar_pendientes(conn, forma_pago=None)}
+    assert Origen("venta_manual", credito) in {p.origen for p in todos}  # contado y crédito: el crédito se factura
+    assert Origen("venta_manual", credito) not in {p.origen for p in listar_pendientes(conn, forma_pago="CONTADO")}
 
-    solo_b = listar_pendientes(conn, lado="b")
+    solo_b = listar_pendientes(conn, lado="b", forma_pago="CONTADO")
     assert [p.origen for p in solo_b] == [Origen("venta_manual", venta)]
-    assert listar_pendientes(conn, desde=datetime(2026, 9, 30, 10, 30)) == solo_b
+    assert listar_pendientes(conn, desde=datetime(2026, 9, 30, 10, 30), forma_pago="CONTADO") == solo_b
     assert len(listar_pendientes(conn, limite=1)) == 1
 
     solicitar(escenario, conn, Origen("venta_manual", venta))  # ya no está pendiente
     assert Origen("venta_manual", venta) not in {p.origen for p in listar_pendientes(conn)}
+
+
+def test_pendientes_nunca_trae_la_forma_de_pago_otro(escenario, conn):
+    otro = escenario.datos.despacho()
+    conn.execute("UPDATE despacho SET forma_pago = 'OTRO' WHERE id = %s", (otro,))
+    assert Origen("despacho", otro) not in {p.origen for p in listar_pendientes(conn)}  # la factura no sabe armarla
+
+
+def test_venta_manual_con_placa_opcional(escenario, conn):
+    con_placa = registrar(escenario, conn, placa=" gzy-858 ")
+    sin_placa = registrar(escenario, conn, placa="")
+    placas = {p.origen.id: p.placa for p in listar_pendientes(conn) if p.origen.tipo == "venta_manual"}
+    assert placas[con_placa] == "GZY858" and placas[sin_placa] is None
+    with pytest.raises(VentaInvalida, match="placa"):
+        registrar(escenario, conn, placa="X" * 21)
 
 
 # ------------------------------------------------------------------------------------------ enlace

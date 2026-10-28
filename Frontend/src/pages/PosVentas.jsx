@@ -40,6 +40,7 @@ function Despacho({ venta, nuevo, onFacturar }) {
         <span className="display__etiqueta">
           {venta.surtidor}
           {venta.origen_tipo === 'venta_manual' && ' · manual'}
+          {venta.forma_pago === 'CREDITO' && ' · crédito'}
         </span>
         <span className="display__monto">
           <Rodillo texto={pesos(venta.valor)} />
@@ -90,7 +91,7 @@ export default function PosVentas() {
         onCancelar={() => setManual(false)}
         onGuardada={(venta) => {
           setManual(false);
-          if (venta.forma_pago === 'CONTADO') setFacturando(venta);
+          setFacturando(venta);
         }}
       />
     );

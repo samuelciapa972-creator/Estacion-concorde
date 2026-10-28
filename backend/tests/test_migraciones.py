@@ -47,7 +47,7 @@ def test_upgrade_desde_cero_downgrade_a_base_y_otra_vez_upgrade(esquema_vacio):
     bd = esquema_vacio
     migrar(bd.dsn)
     assert tablas(bd) == TABLAS_INICIALES | TABLAS_NUEVAS | {"alembic_version"}
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0007"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0008"
 
     migrar(bd.dsn, "base", bajar=True)
     assert tablas(bd) == {"alembic_version"}
@@ -58,7 +58,7 @@ def test_upgrade_desde_cero_downgrade_a_base_y_otra_vez_upgrade(esquema_vacio):
     ) == 0  # fmt: skip
 
     migrar(bd.dsn)
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0007"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0008"
 
 
 def test_bajar_la_0004_deja_las_vistas_de_ventas_sin_origen(esquema_vacio):
@@ -417,4 +417,17 @@ def test_bajar_la_0007_deja_la_0006(esquema_vacio):
     vistas = {f[0] for f in bd.consultar("SELECT viewname FROM pg_views WHERE schemaname = %s", (bd.esquema,))}
     assert {"v_ventas_origen", "v_ventas_diarias", "v_ventas_mensuales"} <= vistas
     migrar(bd.dsn)
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0007"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0008"
+
+
+# ------------------------------------------------------------------------------------- 0008: placa de la venta manual
+def test_bajar_la_0008_quita_la_placa_de_la_venta_manual(esquema_vacio):
+    bd = esquema_vacio
+    migrar(bd.dsn)
+    migrar(bd.dsn, "0007", bajar=True)
+    columnas = {f[0] for f in bd.consultar(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = 'venta_manual'",
+        (bd.esquema,))}  # fmt: skip
+    assert "placa" not in columnas
+    migrar(bd.dsn)
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0008"

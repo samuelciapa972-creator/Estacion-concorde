@@ -50,7 +50,7 @@ def pendientes(
     surtidor_id: int | None = None,
     lado: Annotated[str | None, Query(min_length=1, max_length=1)] = None,
     desde: Annotated[datetime | None, Query(description="hora local de la estación")] = None,
-    forma_pago: Literal["CONTADO", "CREDITO", "TODAS"] = "CONTADO",
+    forma_pago: Literal["CONTADO", "CREDITO", "TODAS"] = "TODAS",
     limite: Annotated[int, Query(ge=1, le=500)] = 50,
 ) -> list[PendienteSalida]:
     filas = listar_pendientes(
@@ -97,5 +97,6 @@ def crear_venta_manual(datos: VentaManualEntrada, conn: Conn, sesion: SesionActu
         valor=datos.valor,
         ppu=datos.ppu,
         forma_pago=datos.forma_pago,
+        placa=datos.placa,
     )
     return Creado(id=venta_id)
