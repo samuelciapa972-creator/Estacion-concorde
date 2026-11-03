@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 from psycopg import errors
 
-from conftest import BaseDePrueba, migrar
+from conftest import BaseDePrueba, Datos, migrar
 from estacion.facturacion.documentos import TIPOS_DOCUMENTO, calcular_dv
 from estacion.facturacion.modelos import EstadoEntrega, EstadoFactura, EstadoFacturacion, EstadoOutbox, TipoTrabajo
 from estacion.modelos import FormaPago, MarcaSurtidor, PlacaTipo, Rol, Severidad
@@ -47,7 +47,7 @@ def test_upgrade_desde_cero_downgrade_a_base_y_otra_vez_upgrade(esquema_vacio):
     bd = esquema_vacio
     migrar(bd.dsn)
     assert tablas(bd) == TABLAS_INICIALES | TABLAS_NUEVAS | {"alembic_version"}
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0008"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0009"
 
     migrar(bd.dsn, "base", bajar=True)
     assert tablas(bd) == {"alembic_version"}
@@ -58,7 +58,7 @@ def test_upgrade_desde_cero_downgrade_a_base_y_otra_vez_upgrade(esquema_vacio):
     ) == 0  # fmt: skip
 
     migrar(bd.dsn)
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0008"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0009"
 
 
 def test_bajar_la_0004_deja_las_vistas_de_ventas_sin_origen(esquema_vacio):
@@ -417,7 +417,7 @@ def test_bajar_la_0007_deja_la_0006(esquema_vacio):
     vistas = {f[0] for f in bd.consultar("SELECT viewname FROM pg_views WHERE schemaname = %s", (bd.esquema,))}
     assert {"v_ventas_origen", "v_ventas_diarias", "v_ventas_mensuales"} <= vistas
     migrar(bd.dsn)
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0008"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0009"
 
 
 # ------------------------------------------------------------------------------------- 0008: placa de la venta manual
@@ -430,4 +430,26 @@ def test_bajar_la_0008_quita_la_placa_de_la_venta_manual(esquema_vacio):
         (bd.esquema,))}  # fmt: skip
     assert "placa" not in columnas
     migrar(bd.dsn)
-    assert bd.valor("SELECT version_num FROM alembic_version") == "0008"
+    assert bd.valor("SELECT version_num FROM alembic_version") == "0009"
+
+
+# ------------------------------------------------------------------------------------------ 0009: surtidor Wayne
+def test_la_0009_crea_el_wayne_y_al_bajar_solo_lo_quita_si_no_tiene_ventas(esquema_vacio):
+    bd = esquema_vacio
+    migrar(bd.dsn)
+    wayne = "SELECT count(*) FROM surtidor WHERE marca = 'WAYNE' AND codigo_externo = 'HELIX-1' AND activo"
+    assert bd.valor(wayne) == 1
+
+    migrar(bd.dsn, "0008", bajar=True)
+    assert bd.valor("SELECT count(*) FROM surtidor") == 0
+    migrar(bd.dsn)
+    assert bd.valor(wayne) == 1
+
+    # con ventas no se borra: bajar la migración nunca pierde datos
+    datos = Datos(bd)
+    datos.venta_manual(datos.usuario())
+    assert bd.valor("SELECT s.codigo_externo FROM venta_manual v JOIN surtidor s ON s.id = v.surtidor_id") == "HELIX-1"
+    migrar(bd.dsn, "0008", bajar=True)
+    assert bd.valor("SELECT count(*) FROM surtidor WHERE codigo_externo = 'HELIX-1'") == 1
+    migrar(bd.dsn)
+    assert bd.valor(wayne) == 1

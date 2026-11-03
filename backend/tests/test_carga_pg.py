@@ -132,8 +132,9 @@ def test_un_error_a_mitad_de_la_carga_no_deja_nada(bd, cargar_xml):
     with pytest.raises(psycopg.errors.StringDataRightTruncation):
         cargar_xml(xml_de(libros))
 
-    for tabla in ("importacion", "despacho", "turno", "anomalia", "surtidor", "producto"):
+    for tabla in ("importacion", "despacho", "turno", "anomalia", "producto"):
         assert bd.valor(f"SELECT count(*) FROM {tabla}") == 0, tabla
+    assert bd.consultar("SELECT marca FROM surtidor") == [("WAYNE",)]  # solo el que crea la migración 0009
 
     assert cargar_xml(s.xml()).nuevos == 6  # corregido el archivo, la carga entra completa
 

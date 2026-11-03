@@ -186,7 +186,8 @@ class Datos:
         )  # fmt: skip
 
     def venta_manual(self, usuario_id: int, **cambios: Any) -> int:
-        s = self.uno("SELECT id FROM surtidor LIMIT 1") or self.uno(
+        # el surtidor del despacho si ya hay uno (para poder enlazarlos); si no, el Wayne que crea la 0009
+        s = self.uno("SELECT id FROM surtidor ORDER BY marca = 'WAYNE', id LIMIT 1") or self.uno(
             "INSERT INTO surtidor (marca, codigo_externo) VALUES ('WAYNE', 'W1') RETURNING id"
         )
         p = self.uno("SELECT id FROM producto LIMIT 1") or self.uno(
