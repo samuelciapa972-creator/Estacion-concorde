@@ -1,0 +1,38 @@
+# Caddy de PRODUCCIÓN (infra/docker-compose.prod.yml): el dominio público con certificado de Let's Encrypt, la PWA y
+# la API bajo /api en el mismo origen. El banco de pruebas usa infra/caddy/Caddyfile (CA interna, red local).
+#   ESTACION_DOMINIO  p. ej. eds.ejemplo.com.co (debe apuntar a este servidor y tener abiertos los puertos 80 y 443)
+#   ESTACION_TLS      correo para Let's Encrypt; `internal` solo para probar el compose sin dominio
+{$ESTACION_DOMINIO} {
+	tls {$ESTACION_TLS}
+	encode zstd gzip
+
+	# API: Caddy agrega X-Forwarded-For con la IP real del cliente (la API la usa para el límite de intentos).
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Lo que no lleva hash en el nombre se revalida siempre: una versión nueva llega a la tablet al recargar.
+	@sin_cache not path /assets/*
+	header @sin_cache Cache-Control "no-cache"
+	@con_hash path /assets/*
+	header @con_hash Cache-Control "public, max-age=31536000, immutable"
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

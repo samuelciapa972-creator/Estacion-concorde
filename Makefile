@@ -30,6 +30,18 @@
 #   make stack-logs       registros de todos los servicios;  make stack-down: detiene todo (conserva los datos)
 #   make stack-usuario U=bombero1 N="Bombero Uno" R=BOMBERO   crea un usuario (pide el PIN)
 #   make ca               copia el certificado raíz de Caddy a infra/caddy-root.crt (para instalar en la tablet)
+#
+# PRODUCCIÓN en el servidor de internet (infra/docker-compose.prod.yml; ver docs/despliegue-produccion.md):
+#   make prod             construye y levanta db + migraciones + api + worker-dian + web (Let's Encrypt)
+#   make prod-ps | prod-logs | prod-down
+#   make prod-usuario U=admin1 N="Admin Uno" R=ADMIN   crea un usuario (pide el PIN)
+#   make prod-estado      facturas de hoy por estado y la cola (lo que hay que mirar cada día en el piloto)
+#   make prod-respaldo    respaldo de la base (infra/respaldo.sh; el cron lo corre cada noche)
+#   make prod-restaurar-prueba [ARCHIVO=...]   restaura un respaldo en una base temporal y la borra
+#   make prod-habilitacion-probar | prod-verificar | prod-configurar PREFIJO=EDSC | prod-correo-prueba DESTINO=...
+#   make prod-clave-tecnica PREFIJO=EDSC ARCHIVO=$HOME/clave-edsc.env
+#   make emisor-exportar ARCHIVO=datos/emisor.csv   (en desarrollo) los datos de la estación activa del banco de pruebas
+#   make prod-emisor-importar ARCHIVO=$HOME/emisor.csv   (en el servidor) los carga en una base nueva
 
 BACK    := backend
 WEB     := Frontend
@@ -164,3 +176,72 @@ stack-usuario:
 ca:
 	$(COMPOSE) cp web:/data/caddy/pki/authorities/local/root.crt infra/caddy-root.crt
 	@echo "Instale infra/caddy-root.crt en la tablet (ver docs/despliegue.md). No es secreto, pero no va al repositorio."
+
+# ---------------------------------------------------------------- producción (servidor de internet)
+PROD     := docker compose --project-directory . -f infra/docker-compose.prod.yml
+# Comandos sueltos con la imagen del backend, el .env y el certificado (no arrancan otro worker).
+PROD_RUN := $(PROD) run --rm --no-deps worker-dian
+PSQL_PROD = $(PROD) exec -T db psql -U estacion -d estacion -P pager=off -c
+
+.PHONY: prod prod-ps prod-logs prod-down prod-usuario prod-estado prod-respaldo prod-restaurar-prueba \
+        prod-habilitacion-probar prod-verificar prod-configurar prod-correo-prueba prod-clave-tecnica \
+        emisor-exportar prod-emisor-importar
+
+prod:
+	@test -f .env || { echo "falta el .env (ver docs/despliegue-produccion.md)"; exit 2; }
+	$(PROD) up -d --build --wait --remove-orphans
+
+prod-ps:
+	$(PROD) ps
+
+prod-logs:
+	$(PROD) logs -f --tail 100
+
+prod-down:
+	$(PROD) down
+
+prod-usuario:
+	$(PROD) exec api python -m estacion.usuarios crear --usuario "$(U)" --nombre "$(N)" --rol "$(R)"
+
+prod-estado:
+	@$(PSQL_PROD) "SELECT estado, count(*) AS facturas_hoy FROM factura WHERE fecha_emision >= current_date GROUP BY estado ORDER BY estado"
+	@$(PSQL_PROD) "SELECT tipo, estado, count(*), min(creado_en) AS desde FROM outbox WHERE estado IN ('PENDIENTE','EN_CURSO','FALLIDO') AND (estado <> 'FALLIDO' OR terminado_en > now() - interval '7 days') GROUP BY tipo, estado ORDER BY estado"
+
+prod-respaldo:
+	infra/respaldo.sh
+
+prod-restaurar-prueba:
+	infra/restaurar-prueba.sh $(ARCHIVO)
+
+prod-habilitacion-probar:
+	$(PROD_RUN) python -m estacion.habilitacion probar-conexion
+
+prod-verificar:
+	$(PROD_RUN) python -m estacion.habilitacion verificar-produccion
+
+prod-configurar:
+	@test -n "$(PREFIJO)" || { echo "uso: make prod-configurar PREFIJO=EDSC"; exit 2; }
+	$(PROD_RUN) python -m estacion.habilitacion configurar-produccion --prefijo "$(PREFIJO)"
+
+prod-correo-prueba:
+	@test -n "$(DESTINO)" || { echo "uso: make prod-correo-prueba DESTINO=su@correo.com"; exit 2; }
+	$(PROD_RUN) python -m estacion.entrega.probar_correo "$(DESTINO)"
+
+# El contenedor escribe la clave en una carpeta temporal NUEVA y vacía (no se le monta $HOME entero), con el usuario de
+# quien corre make (para que quede suyo y 0600); luego se mueve a ARCHIVO. Por eso el certificado debe poderlo leer ese
+# grupo (docs/despliegue-produccion.md, "Certificado").
+prod-clave-tecnica:
+	@test -n "$(PREFIJO)" && test -n "$(ARCHIVO)" || { echo "uso: make prod-clave-tecnica PREFIJO=EDSC ARCHIVO=\$$HOME/clave-edsc.env"; exit 2; }
+	@test ! -e "$(abspath $(ARCHIVO))" || { echo "ya existe $(abspath $(ARCHIVO)): use una ruta nueva"; exit 2; }
+	@tmp=$$(mktemp -d "$$HOME/.clave-tecnica.XXXXXX") && trap 'rm -rf "$$tmp"' EXIT && \
+	$(PROD) run --rm --no-deps --user "$$(id -u):$$(id -g)" -v "$$tmp:/salida" worker-dian \
+	    python -m estacion.habilitacion guardar-clave-tecnica --prefijo "$(PREFIJO)" --archivo /salida/clave.env && \
+	mv -n "$$tmp/clave.env" "$(abspath $(ARCHIVO))" && echo "clave técnica en $(abspath $(ARCHIVO)) (cópiela al .env y borre el archivo)"
+
+emisor-exportar:
+	@test -n "$(ARCHIVO)" || { echo "uso: make emisor-exportar ARCHIVO=datos/emisor.csv"; exit 2; }
+	infra/emisor.sh exportar "$(ARCHIVO)"
+
+prod-emisor-importar:
+	@test -n "$(ARCHIVO)" || { echo "uso: make prod-emisor-importar ARCHIVO=$$HOME/emisor.csv"; exit 2; }
+	infra/emisor.sh importar "$(ARCHIVO)"

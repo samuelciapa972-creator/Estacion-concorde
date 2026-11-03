@@ -2,6 +2,9 @@
 
 > Alcance: **banco de pruebas interno**. Nada de esto se instala en la estación ni toca equipos o sistemas de
 > IMED OIL (ver `CLAUDE.md`). La emisión usa el proveedor **simulado**: no sale nada hacia la DIAN.
+>
+> **Producción** (servidor de internet con dominio, worker de la DIAN en contenedor, respaldos, piloto): ver
+> `docs/despliegue-produccion.md`.
 
 ## 1. Qué se levanta
 

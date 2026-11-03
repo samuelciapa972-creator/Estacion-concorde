@@ -7,5 +7,7 @@ COPY Frontend/ ./
 RUN npm run build
 
 FROM caddy:2-alpine
-COPY infra/caddy/Caddyfile /etc/caddy/Caddyfile
+# Banco de pruebas: infra/caddy/Caddyfile (CA interna). Producción: infra/caddy/Caddyfile.prod (docker-compose.prod.yml).
+ARG CADDYFILE=infra/caddy/Caddyfile
+COPY ${CADDYFILE} /etc/caddy/Caddyfile
 COPY --from=web /web/dist /srv
