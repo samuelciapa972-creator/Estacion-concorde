@@ -52,7 +52,7 @@ function Despacho({ venta, nuevo, onFacturar }) {
       </div>
       <div className="surtidor__pie">
         {venta.placa ? <span className="placa">{venta.placa}</span> : <span className="placa placa--sin">Sin placa</span>}
-        <Boton onClick={() => onFacturar(venta)} style={{ padding: '10px 18px' }}>
+        <Boton tamano="grande" onClick={() => onFacturar(venta)}>
           Facturar
         </Boton>
       </div>
@@ -113,10 +113,10 @@ export default function PosVentas() {
         subtitulo="Despachos que llegan de la pista"
         grande
       >
-        <Boton variante="secundario" onClick={pendientes.recargar} aria-label="Actualizar" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <Boton variante="secundario" onClick={pendientes.recargar} aria-label="Actualizar">
           <RefreshCw size={14} strokeWidth={2} aria-hidden="true" /> Actualizar
         </Boton>
-        <Boton onClick={() => setManual(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px' }}>
+        <Boton onClick={() => setManual(true)}>
           <Plus size={14} strokeWidth={2.5} aria-hidden="true" /> Venta manual
         </Boton>
       </Encabezado>

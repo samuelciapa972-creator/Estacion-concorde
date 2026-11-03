@@ -188,7 +188,7 @@ function PasoCliente({ onElegido }) {
             <p style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', margin: '4px 0' }}>{resultado.nombre_mostrar}</p>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Factura a: {resultado.email_enmascarado}</p>
           </div>
-          <Boton onClick={() => onElegido(resultado)} style={{ padding: '12px 18px' }}>
+          <Boton tamano="grande" onClick={() => onElegido(resultado)}>
             Usar este cliente
           </Boton>
         </div>
@@ -306,7 +306,7 @@ function Emision({ venta, cliente, medio, onAtras, onEmitida, onTerminar }) {
         {recibo.aviso && <Mensaje tipo="info">{recibo.aviso}</Mensaje>}
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           {factura.estado === 'FACTURADO' && (
-            <Boton disabled={recibo.cargando} onClick={imprimirRecibo} style={{ padding: '10px 18px' }}>
+            <Boton tamano="grande" disabled={recibo.cargando} onClick={imprimirRecibo}>
               {recibo.cargando ? 'Imprimiendo...' : 'Imprimir recibo'}
             </Boton>
           )}
@@ -315,7 +315,7 @@ function Emision({ venta, cliente, medio, onAtras, onEmitida, onTerminar }) {
               {pdf.cargando ? 'Generando PDF...' : 'Descargar PDF'}
             </Boton>
           )}
-          <Boton onClick={onTerminar} style={{ padding: '10px 18px' }}>
+          <Boton tamano="grande" onClick={onTerminar}>
             Siguiente venta
           </Boton>
         </div>
@@ -350,7 +350,7 @@ function Emision({ venta, cliente, medio, onAtras, onEmitida, onTerminar }) {
         <Boton variante="secundario" onClick={error instanceof ErrorApi && error.estado === 409 ? onTerminar : onAtras} disabled={emitiendo || dudoso}>
           {error instanceof ErrorApi && error.estado === 409 ? 'Volver a la lista' : 'Atrás'}
         </Boton>
-        <Boton onClick={emitir} disabled={emitiendo} style={{ flex: 1, padding: '12px' }}>
+        <Boton tamano="grande" onClick={emitir} disabled={emitiendo} style={{ flex: 1 }}>
           {emitiendo ? 'Emitiendo…' : dudoso ? 'Reintentar' : 'Emitir factura'}
         </Boton>
       </div>

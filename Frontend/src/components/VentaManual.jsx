@@ -112,7 +112,7 @@ export default function VentaManual({ onCancelar, onGuardada }) {
           <Boton variante="secundario" onClick={onCancelar}>
             Cancelar
           </Boton>
-          <Boton type="submit" disabled={guardando} style={{ flex: 1, padding: '12px' }}>
+          <Boton type="submit" tamano="grande" disabled={guardando} style={{ flex: 1 }}>
             {guardando ? 'Guardando…' : 'Guardar y facturar'}
           </Boton>
         </div>

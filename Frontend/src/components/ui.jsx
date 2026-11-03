@@ -21,7 +21,9 @@ export function Encabezado({ titulo, subtitulo, grande, children }) {
   );
 }
 
-export function Boton({ variante = 'primario', disabled, style, className = '', children, ...props }) {
+/** `tamano`: "normal" (32 px, el alto de los campos) o "grande" (44 px, acciones principales de la pista). Las
+ *  variantes chico y peligro son las acciones de fila (26 px). El alto y el relleno viven en el CSS (.boton). */
+export function Boton({ variante = 'primario', tamano = 'normal', disabled, style, className = '', children, ...props }) {
   const base = {
     primario: estilos.botonPrimario,
     secundario: estilos.botonSecundario,
@@ -29,7 +31,7 @@ export function Boton({ variante = 'primario', disabled, style, className = '', 
     chico: estilos.botonChico,
   }[variante];
   return (
-    <button type="button" disabled={disabled} className={`boton--${variante} ${className}`.trim()} style={{ ...deshabilitado(base, disabled), ...style }} {...props}>
+    <button type="button" disabled={disabled} className={`boton boton--${variante} boton--${tamano} ${className}`.trim()} style={{ ...deshabilitado(base, disabled), ...style }} {...props}>
       {children}
     </button>
   );

@@ -214,7 +214,7 @@ export default function Ventas() {
             <input id="v_hasta" type="datetime-local" value={form.hasta} onChange={cambiar('hasta')} style={estilos.entrada} />
           </Campo>
           <div className="ventas__acciones">
-            <Boton type="submit" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px' }}>
+            <Boton type="submit">
               <Search size={14} strokeWidth={2.25} aria-hidden="true" /> Buscar
             </Boton>
             <Boton
@@ -222,7 +222,6 @@ export default function Ventas() {
               onClick={() => setMasFiltros(!masFiltros)}
               aria-expanded={masFiltros}
               aria-controls="v_mas"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
               <SlidersHorizontal size={14} strokeWidth={2} aria-hidden="true" />
               Filtros{secundariosActivos > 0 && ` (${secundariosActivos})`}

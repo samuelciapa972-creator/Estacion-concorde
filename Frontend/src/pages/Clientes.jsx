@@ -411,7 +411,7 @@ function RegistroQr() {
           >
             {copiado ? 'Copiado' : 'Copiar'}
           </Boton>
-          <a href="/registro" target="_blank" rel="noreferrer" style={{ ...estilos.botonPrimario, textDecoration: 'none' }}>
+          <a href="/registro" target="_blank" rel="noreferrer" className="boton boton--normal" style={estilos.botonPrimario}>
             ABRIR
           </a>
         </div>

@@ -559,6 +559,35 @@
 }
 
 /* ================================================================== tablet */
+/* ------------------------------------------------------------------ tamaños de botones y campos
+   Una sola escala: los botones normales miden lo mismo que los campos (32 px) para quedar alineados en una fila;
+   las acciones de fila (chico, peligro) 26 px, como el segmentado; las acciones principales de la pista 44 px. */
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 0 14px;
+  line-height: 1.2;
+  text-decoration: none;
+}
+.boton--chico,
+.boton--peligro {
+  min-height: 26px;
+  padding: 0 10px;
+}
+.boton--grande {
+  min-height: 44px;
+  padding: 0 18px;
+}
+main input:not([type='checkbox']):not([type='radio']):not([type='file']),
+main select {
+  box-sizing: border-box;
+  height: 32px;
+}
+
 @media (max-width: 1100px) {
   .consola {
     grid-template-columns: 84px minmax(0, 1fr);
@@ -680,15 +709,24 @@
     grid-template-columns: 1fr !important;
   }
   .segmentado button {
-    min-height: 36px;
+    min-height: 40px;
+  }
+  .boton {
+    min-height: 40px;
+  }
+  .boton--chico,
+  .boton--peligro {
+    min-height: 32px;
+  }
+  .boton--grande {
+    min-height: 44px;
+  }
+  main input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  main select {
+    height: 40px;
   }
   .pista__tarjetas,
   .ventas__busqueda {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .surtidor__pie button {
-    min-height: 44px;
-    padding-left: 22px !important;
-    padding-right: 22px !important;
   }
 }

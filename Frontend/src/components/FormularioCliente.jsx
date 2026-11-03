@@ -113,7 +113,7 @@ export default function FormularioCliente({ fijo, enviando, textoEnviar, onEnvia
 
       {antesDeEnviar}
       {bloqueo && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{bloqueo}</span>}
-      <Boton type="submit" disabled={enviando || !!bloqueo} style={{ padding: '12px' }}>
+      <Boton type="submit" tamano="grande" disabled={enviando || !!bloqueo}>
         {enviando ? 'Guardando…' : textoEnviar}
       </Boton>
     </form>
