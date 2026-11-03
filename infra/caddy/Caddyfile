@@ -7,6 +7,9 @@
 {
 	local_certs
 	skip_install_trust
+	# Los navegadores no mandan SNI cuando se entra por una IP: sin esto Caddy no sabe qué certificado dar y corta
+	# el TLS. ESTACION_IP es la IP de ESTACION_HOST por la que entra la tablet.
+	default_sni {$ESTACION_IP:localhost}
 }
 
 {$ESTACION_HOST:localhost} {

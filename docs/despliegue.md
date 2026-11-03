@@ -22,6 +22,8 @@
    - `JWT_SECRETO`: `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`. Sin él la API **no arranca**, a propósito.
    - `ESTACION_HOST`: los nombres o IPs por los que se entra, separados por coma, p. ej. `localhost, 192.168.1.50`.
      Caddy emite un certificado para cada uno; si la tablet entra por una IP que no está aquí, el navegador lo rechaza.
+   - `ESTACION_IP`: la IP de esa lista por la que entra la tablet (p. ej. `192.168.1.50`). Al entrar por IP el
+     navegador no manda el nombre del servidor (SNI) y, sin esta variable, Caddy corta la conexión TLS.
    - `POSTGRES_PASSWORD`: fuera de un portátil de desarrollo, una clave propia (el valor por defecto es `estacion`).
    - Captcha del registro público: vacío = sin captcha (la API lo advierte al arrancar). Ver `.env.example`.
 2. `make stack` (o `make stack-simulador`).

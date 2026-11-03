@@ -115,6 +115,7 @@ services:
     restart: unless-stopped
     environment:
       ESTACION_HOST: ${ESTACION_HOST:-localhost}
+      ESTACION_IP: ${ESTACION_IP:-localhost}
     ports:
       - "${ESTACION_PUERTO_HTTP:-80}:80"
       - "${ESTACION_PUERTO_HTTPS:-443}:443"
