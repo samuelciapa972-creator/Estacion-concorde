@@ -32,7 +32,7 @@ class DesactivarseASiMismo(Exception):
 def crear(conn: Conexion, usuario: str, nombre: str, rol: Rol, pin: str, *, por: int) -> UsuarioListado:
     """Lanza PinInvalido, UsuarioInvalido o UsuarioYaExiste."""
     exigir_autocommit(conn)
-    pin_hash = hash_pin(pin)
+    pin_hash = hash_pin(pin, rol)
     try:
         with conn.transaction():
             fila = conn.execute(

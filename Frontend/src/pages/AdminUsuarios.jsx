@@ -105,8 +105,12 @@ export default function AdminUsuarios() {
                 <option value="ADMIN">Administrador</option>
               </select>
             </Campo>
-            <Campo etiqueta="PIN" id="usuario-pin">
-              <input type="password" required {...campo('pin')} />
+            <Campo
+              etiqueta="PIN"
+              id="usuario-pin"
+              ayuda={nuevoUsuario.rol === 'ADMIN' ? 'Solo números, de 8 a 10 dígitos.' : 'Solo números, de 4 a 10 dígitos.'}
+            >
+              <input type="password" inputMode="numeric" required {...campo('pin')} />
             </Campo>
             <Boton type="submit" style={{ marginTop: '8px' }}>
               Guardar

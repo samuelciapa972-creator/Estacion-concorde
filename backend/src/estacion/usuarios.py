@@ -26,7 +26,7 @@ from .servicios._bd import auditar
 def _leer_pin(desde_stdin: bool) -> str:
     if desde_stdin:
         return sys.stdin.readline().strip()
-    pin = getpass.getpass("PIN (4 a 10 dígitos): ")
+    pin = getpass.getpass("PIN (4 a 10 dígitos; 8 a 10 para ADMIN): ")
     if getpass.getpass("Repita el PIN: ") != pin:
         raise PinInvalido("los dos PIN no coinciden")
     return pin
@@ -57,13 +57,27 @@ def main(argv: list[str] | None = None) -> int:
         print("ERROR: falta la variable de entorno DATABASE_URL", file=sys.stderr)
         return 2
     usuario = args.usuario.strip().lower()
+    pin_hash: str | None = None
     try:
-        pin_hash = hash_pin(_leer_pin(args.pin_stdin)) if args.accion in ("crear", "pin") else None
+        pin = _leer_pin(args.pin_stdin) if args.accion in ("crear", "pin") else ""
+        if args.accion == "crear":
+            pin_hash = hash_pin(pin, Rol(args.rol))
     except PinInvalido as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
 
     with psycopg.connect(dsn, autocommit=True) as conn, conn.transaction():
+        if args.accion == "pin":
+            # El mínimo depende del rol (un ADMIN lleva un PIN más largo): se valida con el rol que tiene.
+            rol = conn.execute("SELECT rol FROM usuario WHERE usuario = %s", (usuario,)).fetchone()
+            if rol is None:
+                print(f"ERROR: no existe el usuario {usuario!r}", file=sys.stderr)
+                return 1
+            try:
+                pin_hash = hash_pin(pin, Rol(rol[0]))
+            except PinInvalido as e:
+                print(f"ERROR: {e}", file=sys.stderr)
+                return 2
         if args.accion == "crear":
             try:
                 fila = conn.execute(

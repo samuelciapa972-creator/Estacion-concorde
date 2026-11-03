@@ -687,3 +687,15 @@ def test_comando_de_usuarios(escenario, monkeypatch):
     assert usuarios.main(["pin", "--usuario", "cajero.uno", "--pin-stdin"]) == 2  # PIN muy corto
     assert usuarios.main(["desactivar", "--usuario", "cajero.uno"]) == 0
     assert usuarios.main(["desbloquear", "--usuario", "nadie"]) == 1
+
+
+def test_comando_de_usuarios_pin_de_admin(escenario, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", escenario.datos.bd.dsn)
+    monkeypatch.setattr("sys.stdin", io.StringIO("1234\n"))
+    assert usuarios.main(["crear", "--usuario", "jefe", "--nombre", "Jefe", "--rol", "ADMIN", "--pin-stdin"]) == 2
+    monkeypatch.setattr("sys.stdin", io.StringIO("12345678\n"))
+    assert usuarios.main(["crear", "--usuario", "jefe", "--nombre", "Jefe", "--rol", "ADMIN", "--pin-stdin"]) == 0
+    monkeypatch.setattr("sys.stdin", io.StringIO("4321\n"))
+    assert usuarios.main(["pin", "--usuario", "jefe", "--pin-stdin"]) == 2  # cambiar a uno corto tampoco
+    monkeypatch.setattr("sys.stdin", io.StringIO("4321\n"))
+    assert usuarios.main(["pin", "--usuario", "nadie", "--pin-stdin"]) == 1

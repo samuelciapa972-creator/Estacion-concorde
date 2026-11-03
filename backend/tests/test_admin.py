@@ -114,6 +114,17 @@ def test_pin_de_10_digitos_como_la_cedula_del_bombero(api):
     assert largo.status_code == 422  # 11 dígitos: no
 
 
+def test_pin_de_admin_minimo_8_digitos(api):
+    # El sistema está en internet: el ADMIN (anula facturas, crea usuarios) no puede tener un PIN de 4 dígitos.
+    base = {"usuario": "admin.corto", "nombre": "Admin Corto", "rol": "ADMIN", "pin": "1234567"}
+    corto = api.post("/usuarios", base, como=api.admin)
+    assert corto.status_code == 422 and "8" in corto.json()["detail"] and "1234567" not in corto.text
+    assert api.post("/usuarios", {**base, "pin": "12345678"}, como=api.admin).status_code == 201
+    # El bombero sigue con 4 a 10 dígitos.
+    assert api.post("/usuarios", {**base, "usuario": "bombero.corto", "rol": "BOMBERO", "pin": "1234"},
+                    como=api.admin).status_code == 201  # fmt: skip
+
+
 def test_crear_usuario_errores(api):
     base = {"usuario": "cajero1", "nombre": "Cajero Uno", "rol": "BOMBERO", "pin": "1357"}
     assert api.post("/usuarios", base, como=api.admin).status_code == 201

@@ -26,11 +26,14 @@ from .ajustes import Ajustes
 
 ALGORITMO = "HS256"
 _PIN = re.compile(r"^[0-9]{4,10}$")  # hasta 10: los bomberos usan su cédula, como en Nexus
+# El sistema está en internet: el ADMIN (anula facturas, crea usuarios) lleva un PIN más largo. Solo se exige al crear
+# o cambiar el PIN; un ADMIN con PIN corto de antes sigue entrando hasta que se lo cambien.
+PIN_MINIMO_ADMIN = 8
 _hasher = PasswordHasher()  # argon2id con los parámetros recomendados por la librería
 
 
 class PinInvalido(ValueError):
-    """El PIN no cumple el formato (4 a 10 dígitos)."""
+    """El PIN no cumple el formato (4 a 10 dígitos; PIN_MINIMO_ADMIN a 10 para un ADMIN)."""
 
 
 class CredencialesInvalidas(Exception):
@@ -55,9 +58,12 @@ class Sesion:
     rol: Rol
 
 
-def hash_pin(pin: str) -> str:
+def hash_pin(pin: str, rol: Rol | None = None) -> str:
+    """Lanza PinInvalido si no son 4 a 10 dígitos, o menos de PIN_MINIMO_ADMIN para un ADMIN."""
     if not _PIN.match(pin):
         raise PinInvalido("el PIN debe tener entre 4 y 10 dígitos")
+    if rol is Rol.ADMIN and len(pin) < PIN_MINIMO_ADMIN:
+        raise PinInvalido(f"el PIN de un administrador debe tener entre {PIN_MINIMO_ADMIN} y 10 dígitos")
     return _hasher.hash(pin)
 
 
