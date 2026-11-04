@@ -117,21 +117,23 @@ export default function Facturacion() {
               </Celda>
               <Celda alinear="right" fuerte>{f.tipo === 'NOTA_CREDITO' ? '−' : ''}{pesos(f.total)}</Celda>
               <Celda alinear="center">
+                <div className="acciones-fila">
                 {f.estado === 'FACTURADO' && (
                   <Boton variante="chico" onClick={() => pdf(f)} disabled={descarga.id === f.id} aria-label={`Descargar PDF de ${f.numero}`}>
                     {descarga.id === f.id ? '...' : 'PDF'}
                   </Boton>
                 )}
                 {f.estado === 'FACTURADO' && (
-                  <Boton variante="chico" onClick={() => recibo(f)} disabled={descarga.id === `r${f.id}`} aria-label={`Imprimir el recibo de ${f.numero}`} style={{ marginLeft: '6px' }}>
+                  <Boton variante="chico" onClick={() => recibo(f)} disabled={descarga.id === `r${f.id}`} aria-label={`Imprimir el recibo de ${f.numero}`}>
                     {descarga.id === `r${f.id}` ? '...' : 'Recibo'}
                   </Boton>
                 )}
                 {puedeAnular(f, usuario) && (
-                  <Boton variante="chico" onClick={() => setAAnular(f)} aria-label={`Anular la factura ${f.numero}`} style={{ marginLeft: '6px' }}>
+                  <Boton variante="chico" onClick={() => setAAnular(f)} aria-label={`Anular la factura ${f.numero}`}>
                     Anular
                   </Boton>
                 )}
+                </div>
               </Celda>
             </tr>
           ))}

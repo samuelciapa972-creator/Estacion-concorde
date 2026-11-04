@@ -582,6 +582,16 @@
   min-height: 44px;
   padding: 0 18px;
 }
+/* Acciones de una fila de tabla (PDF, Recibo, Anular): todas del mismo ancho, en fila o apiladas si no caben. */
+.acciones-fila {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.acciones-fila > .boton {
+  min-width: 84px;
+}
 main input:not([type='checkbox']):not([type='radio']):not([type='file']),
 main select {
   box-sizing: border-box;
