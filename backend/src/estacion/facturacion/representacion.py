@@ -8,9 +8,8 @@ CLAUDE.md): encabezado con la resolución de numeración, comprador, forma y med
 letras, CUFE, QR y fecha de validación.
 
 SIN VERIFICAR contra el anexo técnico:
-    · El contenido del QR (`contenido_qr`) copia el formato del QR IMPRESO en la factura de referencia
-      (NumFac, FecFac, HorFac, NitFac, DocAdq, ValFac, ValIva, ValOtroIm, ValTolFac, CUFE y la URL). El nodo
-      `sts:QRCode` del XML lleva hoy solo la URL; cuál de los dos contenidos exige el anexo está por confirmar.
+    · El QR impreso (`contenido_qr`) es el enlace de `sts:QRCode` del XML (el que validó la DIAN). La factura de
+      referencia imprimía además los datos en texto; si el anexo vigente lo exigiera, se vuelve a ese formato.
     · Los textos legales obligatorios de la representación gráfica (si los hay además de los de la referencia).
 Fuera del ambiente de producción ("1") el PDF lleva SIEMPRE la marca "SIN VALIDEZ FISCAL".
 """
@@ -255,36 +254,16 @@ _ETIQUETA_CODIGO = {"FACTURA": "CUFE", "NOTA_CREDITO": "CUDE"}
 
 
 def contenido_qr(d: DatosRepresentacion) -> str:
-    """Texto del QR impreso, con el formato del QR de la factura de referencia (SIN VERIFICAR contra el anexo).
+    """Contenido del QR impreso (PDF y recibo): el MISMO de `sts:QRCode` del XML que validó la DIAN, el enlace de
+    consulta por CUFE (o CUDE en la nota). Antes llevaba además los datos en texto, como la factura de referencia, y en
+    el ensayo del 2026-11-04 el celular lo leía como texto y no abría la consulta.
 
-    >>> print(contenido_qr(_EJEMPLO).replace(_EJEMPLO.cufe, "<CUFE>"))
-    NumFac: PRUE1
-    FecFac: 2026-10-01
-    HorFac: 20:13:14-05:00
-    NitFac: 900123456
-    DocAdq: 1000000017
-    ValFac: 29757.000000
-    ValIva: 0.00
-    ValOtroIm: 0.00
-    ValTolFac: 29757.000000
-    CUFE: <CUFE>
-    https://catalogo-vpfe-hab.dian.gov.co/document/searchqr?documentkey=<CUFE>
+    >>> contenido_qr(_EJEMPLO) == _EJEMPLO.url_qr
+    True
     """
-    return "\n".join(
-        [
-            f"NumFac: {d.numero}",
-            f"FecFac: {d.fecha}",
-            f"HorFac: {d.hora}",
-            f"NitFac: {d.nit}",
-            f"DocAdq: {d.comprador_documento}",
-            f"ValFac: {d.valor_bruto_xml}",
-            f"ValIva: {_dec2(d.impuestos)}",
-            f"ValOtroIm: {_dec2(Decimal(0))}",
-            f"ValTolFac: {d.valor_total_xml}",
-            f"{_ETIQUETA_CODIGO[d.tipo]}: {d.cufe}",
-            d.url_qr,
-        ]
-    )
+    if not d.url_qr:
+        raise RepresentacionInvalida("el XML no trae el enlace del QR (sts:QRCode)")
+    return d.url_qr
 
 
 # ------------------------------------------------------------------------------------------ números

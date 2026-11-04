@@ -47,15 +47,12 @@ def test_lee_del_xml_lo_que_muestra_el_pdf():
     )  # fmt: skip
 
 
-def test_el_qr_lleva_los_campos_de_la_factura_de_referencia():
+def test_el_qr_impreso_es_el_enlace_del_xml():
+    # Ensayo 2026-11-04: con todos los datos en texto, el celular (Google Lens, la cámara) no abría la consulta. El QR
+    # impreso es el MISMO contenido de `sts:QRCode` del XML que validó la DIAN: solo el enlace de consulta por CUFE.
     f = construir()
-    campos = dict(r.split(": ", 1) for r in contenido_qr(leer_xml(f.xml)).splitlines()[:-1])
-    assert list(campos) == [
-        "NumFac", "FecFac", "HorFac", "NitFac", "DocAdq", "ValFac", "ValIva", "ValOtroIm", "ValTolFac", "CUFE",
-    ]  # fmt: skip
-    assert campos["NumFac"] == f.numero and campos["CUFE"] == f.cufe
-    assert campos["ValFac"] == campos["ValTolFac"] == "29757.000000"  # como el QR impreso de la referencia
-    assert contenido_qr(leer_xml(f.xml)).splitlines()[-1] == f.qr
+    assert contenido_qr(leer_xml(f.xml)) == f.qr
+    assert f.qr.startswith("https://catalogo-vpfe-hab.dian.gov.co/document/searchqr?documentkey=") and f.cufe in f.qr
 
 
 def test_pdf_muestra_numero_valores_en_formato_colombiano_y_valor_en_letras():
@@ -186,7 +183,7 @@ def test_pdf_de_nota_dice_nota_credito_y_la_factura_anulada():
         assert texto in pdf, texto
     for ausente in (b"CUFE", b"FACTURA ELECTR", b"AUTORIZACI"):
         assert ausente not in pdf, ausente
-    assert contenido_qr(d).count("CUDE: ") == 1 and "CUFE" not in contenido_qr(d)
+    assert contenido_qr(d) == d.url_qr and n.cufe in contenido_qr(d)  # la nota: el enlace con su CUDE
     # La marca depende del ambiente: la nota de producción no la lleva; la de habilitación, sí.
     assert b"SIN VALIDEZ FISCAL" not in pdf
     habilitacion = n.xml.replace(b"<cbc:ProfileExecutionID>1<", b"<cbc:ProfileExecutionID>2<")
