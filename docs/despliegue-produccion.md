@@ -112,6 +112,19 @@ cd /srv/estacion/repo && make prod-respaldo && git pull && make prod
 Primero el respaldo: si una migración falla a medias, hay de dónde volver. Para revisar después de actualizar,
 `make prod-ps` (todo `Up` o `healthy`) y `make prod-estado`.
 
+### Renovar el certificado de firma
+
+El certificado se lee **solo al arrancar**. Al renovarlo:
+1. Copiar el `.pfx` nuevo a `/srv/estacion/secretos/` y darle los mismos permisos (sección 3).
+2. Si cambió el nombre del archivo o la clave, actualizar `DIAN_CERTIFICADO_RUTA` y `DIAN_CERTIFICADO_CLAVE` en el `.env`
+   y correr `make prod`.
+3. Si se reemplazó el archivo con el mismo nombre y la misma clave, `make prod` no nota el cambio: usar
+   `make prod-reiniciar`.
+4. `make prod-habilitacion-probar` debe mostrar la vigencia nueva.
+
+Mientras el certificado esté vencido, las facturas esperan en la cola: no se envía nada sin firma válida.
+Anotar la fecha de vencimiento y renovarlo con tiempo.
+
 ## 6. Respaldos
 
 `infra/respaldo.sh` (`make prod-respaldo`) hace lo siguiente:

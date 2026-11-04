@@ -34,6 +34,7 @@
 # PRODUCCIÓN en el servidor de internet (infra/docker-compose.prod.yml; ver docs/despliegue-produccion.md):
 #   make prod             construye y levanta db + migraciones + api + worker-dian + web (Let's Encrypt)
 #   make prod-ps | prod-logs | prod-down
+#   make prod-reiniciar   reinicia api y worker-dian (p. ej. tras cambiar el certificado .pfx: solo se lee al arrancar)
 #   make prod-usuario U=admin1 N="Admin Uno" R=ADMIN   crea un usuario (pide el PIN)
 #   make prod-estado      facturas de hoy por estado y la cola (lo que hay que mirar cada día en el piloto)
 #   make prod-respaldo    respaldo de la base (infra/respaldo.sh; el cron lo corre cada noche)
@@ -183,7 +184,7 @@ PROD     := docker compose --project-directory . -f infra/docker-compose.prod.ym
 PROD_RUN := $(PROD) run --rm --no-deps worker-dian
 PSQL_PROD = $(PROD) exec -T db psql -U estacion -d estacion -P pager=off -c
 
-.PHONY: prod prod-ps prod-logs prod-down prod-usuario prod-estado prod-respaldo prod-restaurar-prueba \
+.PHONY: prod prod-ps prod-logs prod-down prod-reiniciar prod-usuario prod-estado prod-respaldo prod-restaurar-prueba \
         prod-habilitacion-probar prod-verificar prod-configurar prod-correo-prueba prod-clave-tecnica \
         emisor-exportar prod-emisor-importar
 
@@ -199,6 +200,11 @@ prod-logs:
 
 prod-down:
 	$(PROD) down
+
+# El certificado y el .env se leen al arrancar. `make prod` recrea lo que cambió en el .env, pero no ve un .pfx
+# reemplazado en la misma ruta: por eso este reinicio.
+prod-reiniciar:
+	$(PROD) restart api worker-dian
 
 prod-usuario:
 	$(PROD) exec api python -m estacion.usuarios crear --usuario "$(U)" --nombre "$(N)" --rol "$(R)"
