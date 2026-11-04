@@ -64,11 +64,13 @@ def servidor_smtp():
 
 
 def test_mensaje_de_prueba_lo_dice_en_el_cuerpo():
-    assert "banco de pruebas" in M.texto.lower() and "banco de pruebas" in M.html.lower()
+    assert "ambiente de pruebas" in M.texto.lower() and "ambiente de pruebas" in M.html.lower()
+    # En habilitación SÍ se envía a la DIAN (de pruebas): el aviso no puede decir lo contrario (ensayo 2026-11-04).
+    assert "no fue enviada" not in M.texto and "sin validez fiscal" in M.texto.lower()
     assert "SETP1" in M.texto  # el número sale del asunto
     real = mensaje_factura(remitente="a@example.com", destinatario="b@example.com", asunto="1;A;FE9;01;A",
                            nombre_zip="z.zip", zip=b"", prueba=False)  # fmt: skip
-    assert "banco de pruebas" not in real.texto.lower()
+    assert "ambiente de pruebas" not in real.texto.lower()
 
 
 def test_smtp_entrega_el_zip_adjunto(servidor_smtp):
@@ -285,7 +287,7 @@ def test_correo_de_nota_dice_nota_credito():
         tipo_documento="nc",
     )  # fmt: skip
     assert "nota crédito electrónica NCP1 de EDS PRUEBA SAS" in nota.texto
-    assert "BANCO DE PRUEBAS: esta nota crédito no tiene validez fiscal" in nota.texto
+    assert "PRUEBA: esta nota crédito es del ambiente de pruebas de la DIAN, sin validez fiscal" in nota.texto
     assert "factura" not in nota.texto and "nota crédito" in nota.html
     assert "factura electrónica SETP1" in M.texto  # por defecto sigue siendo factura
 

@@ -69,9 +69,7 @@ def mensaje_factura(
     numero = campos[2] if len(campos) > 2 else ""
     emisor = campos[1] if len(campos) > 1 else ""
     documento = "nota crédito" if tipo_documento == "nc" else "factura"
-    aviso = (
-        f"BANCO DE PRUEBAS: esta {documento} no tiene validez fiscal y no fue enviada a la DIAN.\n\n" if prueba else ""
-    )
+    aviso = f"PRUEBA: esta {documento} es del ambiente de pruebas de la DIAN, sin validez fiscal.\n\n" if prueba else ""
     texto = (
         f"{aviso}Adjuntamos su {documento} electrónica {numero} de {emisor}.\n"
         f"El archivo {nombre_zip} contiene el documento electrónico (XML) y su representación gráfica (PDF).\n"
