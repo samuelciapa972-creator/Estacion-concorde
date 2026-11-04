@@ -26,7 +26,9 @@
 2. Ver la IP del portátil en esa red: `ip -4 addr` (algo como `192.168.x.y`).
 3. En el `.env`: `ESTACION_HOST="localhost, <esa IP>"` (**con comillas**: tiene un espacio) y
    `ESTACION_IP=<esa IP>`. Luego `make stack`.
-4. Si el portátil tiene firewall activo, permitir los puertos 80 y 443 en esa red.
+4. Abrir los puertos 80 y 443 del firewall **solo para la red de la estación** (con Docker Desktop, ufw sí los
+   bloquea: la tablet ve "took too long to respond"). Con la red `192.168.x.0/24` de allá:
+   `sudo ufw allow from 192.168.x.0/24 to any port 80,443 proto tcp`
 5. En la tablet: `https://<esa IP>/pista`. La CA de Caddy es la misma de la casa (mientras no se borre el volumen
    `caddy_data`), así que no hay que reinstalarla. Si el navegador advierte el certificado, revisar el paso 3.
 6. En otra terminal: `make worker-dian`. En el registro debe salir "proveedor DIAN, ambiente de HABILITACIÓN".
