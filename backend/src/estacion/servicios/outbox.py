@@ -24,7 +24,9 @@ Resultados de CONSULTAR_DIAN (por CUFE, o por el track id de un envío asíncron
     no existe       -> se sabe que NO se emitió: factura y origen EN_PROCESO, y se encola ENVIAR_DIAN
     sin respuesta   -> reintento con espera creciente; al agotar los intentos, FALLIDO (revisión humana)
 
-Antes de emitir, el documento se FIRMA (`facturacion/firma.py`) y se guarda en `factura.xml_firmado`. Sin certificado
+Antes de emitir, el documento se FIRMA (`facturacion/firma.py`) y se guarda en `factura.xml_firmado` en su PROPIA
+transacción, confirmada antes de hablar con la DIAN: si el proceso muere a mitad del envío, el reintento manda ese mismo
+documento (no uno firmado de nuevo, con otra hora de firma). Sin certificado
 (o vencido) NO se envía nada: el trabajo se reprograma con la misma política de reintentos (es configuración que se
 puede corregir) y solo al agotarla queda FALLIDO. Al quedar FACTURADA se guarda la respuesta de la DIAN
 (`application_response`) y se encola ENVIAR_CORREO, en la misma transacción.
@@ -137,10 +139,10 @@ def procesar_siguiente(
     """Toma el siguiente trabajo vencido de la cola y lo procesa. None si no hay nada que hacer."""
     exigir_autocommit(conn)
     politica = politica or PoliticaReintentos()
-    hecho, armado = _procesar_uno(conn, proveedor, politica, recursos, None)
-    if hecho is not None and armado:
-        # El ZIP de la entrega ya quedó guardado (confirmado). Ahora se envía ESE archivo, en otra transacción:
-        # si el envío falla o el proceso muere, el reintento manda el mismo ZIP, nunca uno re-armado.
+    hecho, preparado = _procesar_uno(conn, proveedor, politica, recursos, None)
+    if hecho is not None and preparado:
+        # Lo que se va a mandar (el documento firmado, o el ZIP de la entrega) ya quedó guardado y confirmado. Ahora se
+        # envía ESO, en otra transacción: si el envío falla o el proceso muere, el reintento manda lo mismo.
         segundo, _ = _procesar_uno(conn, proveedor, politica, recursos, hecho.trabajo_id)
         hecho = segundo or hecho
     return hecho
@@ -153,7 +155,8 @@ def _procesar_uno(
     recursos: Recursos,
     solo_trabajo: int | None,
 ) -> tuple[TrabajoProcesado | None, bool]:
-    """Procesa un trabajo vencido (o ESE trabajo). El bool dice si se acaba de armar una entrega por enviar."""
+    """Procesa un trabajo vencido (o ESE trabajo). El bool dice si solo se PREPARÓ el envío (se firmó el documento o se
+    armó la entrega) y falta mandarlo, en otra transacción."""
     with conn.transaction():
         fila = conn.execute(
             """SELECT id, factura_id, tipo, intentos FROM outbox
@@ -169,15 +172,15 @@ def _procesar_uno(
         conn.execute("UPDATE outbox SET intentos = %s WHERE id = %s", (intentos, trabajo_id))
         factura = _leer_factura(conn, factura_id)
 
-        armado = False
+        preparado = False
         try:
             with conn.transaction():  # punto de guardado: un error inesperado deshace SOLO este paso
                 if _ambiente_ajeno(conn, trabajo_id, factura, recursos):
                     estado = factura.estado  # ni se firma, ni se envía, ni se consulta, ni se entrega: FALLIDO
                 elif tipo == TipoTrabajo.ENVIAR_DIAN:
-                    estado = _enviar(conn, proveedor, politica, trabajo_id, intentos, factura, recursos)
+                    estado, preparado = _enviar(conn, proveedor, politica, trabajo_id, intentos, factura, recursos)
                 elif tipo == TipoTrabajo.ENVIAR_CORREO:
-                    estado, armado = _entregar(conn, politica, trabajo_id, intentos, factura, recursos)
+                    estado, preparado = _entregar(conn, politica, trabajo_id, intentos, factura, recursos)
                 else:
                     estado = _consultar(conn, proveedor, politica, trabajo_id, intentos, factura)
         except Exception as e:  # frontera de la cola: un trabajo roto no puede detener a los demás
@@ -188,7 +191,7 @@ def _procesar_uno(
             auditar(conn, "TRABAJO_ERROR_INESPERADO", "factura", factura_id,
                     detalle={"tipo": tipo, "error": type(e).__name__})  # fmt: skip
             estado = factura.estado
-        return TrabajoProcesado(trabajo_id, factura_id, TipoTrabajo(tipo), estado), armado
+        return TrabajoProcesado(trabajo_id, factura_id, TipoTrabajo(tipo), estado), preparado
 
 
 def procesar_pendientes(
@@ -278,14 +281,14 @@ def _ambiente_ajeno(conn: Conexion, trabajo_id: int, f: _Factura, recursos: Recu
 
 def _firmar(
     conn: Conexion, politica: PoliticaReintentos, trabajo_id: int, intentos: int, f: _Factura, recursos: Recursos
-) -> bytes | None:
-    """El XML firmado (y guardado), o None si no se pudo: entonces el trabajo queda reprogramado o FALLIDO.
+) -> tuple[bytes | None, bool]:
+    """(XML firmado, True si se acaba de firmar). None si no se pudo: el trabajo queda reprogramado o FALLIDO.
 
     Un reintento reenvía el MISMO documento ya firmado: si la DIAN validó el primer envío (y se perdió la respuesta),
     lo que se guarda y se entrega es lo que ella vio. Un reenvío tras un rechazo lo limpia (`emision.solicitar`)."""
     previo = conn.execute("SELECT xml_firmado FROM factura WHERE id = %s", (f.id,)).fetchone()
     if previo is not None and previo[0]:
-        return str(previo[0]).encode("utf-8")
+        return str(previo[0]).encode("utf-8"), False
     error = recursos.error_certificado or "no hay certificado de firma"
     firmado: bytes | None = None
     if recursos.certificado is not None:
@@ -300,9 +303,9 @@ def _firmar(
             "o genere uno de prueba con `python -m estacion.certificado`",
         )  # fmt: skip
         auditar(conn, "FIRMA_NO_DISPONIBLE", "factura", f.id, detalle={"numero": f.numero})
-        return None
+        return None, False
     conn.execute("UPDATE factura SET xml_firmado = %s WHERE id = %s", (firmado.decode("utf-8"), f.id))
-    return firmado
+    return firmado, True
 
 
 def _enviar(
@@ -313,10 +316,27 @@ def _enviar(
     intentos: int,
     f: _Factura,
     recursos: Recursos,
-) -> EstadoFactura:
-    firmado = _firmar(conn, politica, trabajo_id, intentos, f, recursos)
+) -> tuple[EstadoFactura, bool]:
+    """(estado de la factura, True si en este paso solo se FIRMÓ: el envío va en otra transacción)."""
+    firmado, recien_firmado = _firmar(conn, politica, trabajo_id, intentos, f, recursos)
     if firmado is None:
-        return f.estado  # NUNCA se envía un documento sin firma
+        return f.estado, False  # NUNCA se envía un documento sin firma
+    if recien_firmado:
+        # La firma se confirma ANTES de hablar con la DIAN (ver el docstring del módulo). Firmar no cuenta como intento.
+        conn.execute("UPDATE outbox SET intentos = intentos - 1 WHERE id = %s", (trabajo_id,))
+        return f.estado, True
+    return _enviar_firmado(conn, proveedor, trabajo_id, f, firmado, politica, intentos), False
+
+
+def _enviar_firmado(
+    conn: Conexion,
+    proveedor: ProveedorFacturacion,
+    trabajo_id: int,
+    f: _Factura,
+    firmado: bytes,
+    politica: PoliticaReintentos,
+    intentos: int,
+) -> EstadoFactura:
     try:
         solicitud = _solicitud(conn, f, firmado)
     except Exception as e:  # error NUESTRO (datos que cambiaron): no se envía nada; lo revisa una persona

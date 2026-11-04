@@ -450,6 +450,34 @@ def test_reintento_no_vuelve_a_firmar(escenario, conn, recursos):
     assert escenario.datos.uno("SELECT xml_firmado FROM factura WHERE id = %s", (f.id,)) == primero
 
 
+def test_la_firma_queda_guardada_antes_de_enviar(escenario, conn, recursos):
+    # M1: si el proceso muere MIENTRAS habla con la DIAN (apagón, kill), la DIAN pudo quedarse con el documento. El
+    # reintento debe mandar EL MISMO documento firmado (no uno firmado de nuevo, con otra hora de firma): así lo que se
+    # guarda y se entrega al cliente es lo que vio la DIAN.
+    f, _ = solicitar(escenario, conn)
+    vistos: list[bytes] = []
+
+    class SeCaeAlEnviar(ProveedorSimulado):
+        def emitir(self, solicitud):
+            vistos.append(solicitud.documento)
+            raise SystemExit("el worker murió a mitad del envío")  # no lo atrapa ningún `except Exception`
+
+    with pytest.raises(SystemExit):
+        procesar_siguiente(conn, SeCaeAlEnviar(), recursos=recursos)
+    guardado = escenario.datos.uno("SELECT xml_firmado FROM factura WHERE id = %s", (f.id,))
+    assert guardado is not None and guardado.encode("utf-8") == vistos[0]
+    assert cola(escenario, f.id) == [("ENVIAR_DIAN", "PENDIENTE", 0)]  # firmar no gasta un intento
+
+    class Registra(ProveedorSimulado):
+        def emitir(self, solicitud):
+            vistos.append(solicitud.documento)
+            return super().emitir(solicitud)
+
+    procesar_siguiente(conn, Registra(), recursos=recursos)
+    assert vistos[1] == vistos[0]  # el reintento manda el mismo documento
+    assert factura(escenario, f.id)[0] == "FACTURADO"
+
+
 def _envio_incierto_y_consulta(e: Escenario, conn, proveedor, politica, recursos) -> None:
     """Un ENVIAR que no responde (y no emitió) seguido de su CONSULTAR, que dice "no existe"."""
     proveedor.falla_siguiente = "timeout_antes"
