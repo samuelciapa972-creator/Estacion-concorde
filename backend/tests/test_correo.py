@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import smtplib
 import socketserver
 import threading
@@ -287,3 +288,12 @@ def test_correo_de_nota_dice_nota_credito():
     assert "BANCO DE PRUEBAS: esta nota crédito no tiene validez fiscal" in nota.texto
     assert "factura" not in nota.texto and "nota crédito" in nota.html
     assert "factura electrónica SETP1" in M.texto  # por defecto sigue siendo factura
+
+
+def test_destinatario_con_tilde_sin_smtputf8_es_rechazo(servidor_smtp):
+    # M2: un correo con tilde o ñ que el servidor no acepta (no anuncia SMTPUTF8) no se arregla reintentando: es un
+    # rechazo con un motivo que se entiende, para corregir el correo del cliente y reenviar.
+    host, puerto, recibidos = servidor_smtp
+    with pytest.raises(CorreoRechazado, match="tildes") as e:
+        EnviadorSmtp(host, puerto).enviar(dataclasses.replace(M, destinatario="josé@example.com"))
+    assert recibidos == [] and "josé" not in str(e.value)  # el mensaje no lleva la dirección (Ley 1581)

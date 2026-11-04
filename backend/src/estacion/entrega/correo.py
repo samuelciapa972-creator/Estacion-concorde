@@ -146,7 +146,15 @@ class EnviadorSmtp:
                     except smtplib.SMTPServerDisconnected:
                         # Gmail responde 535 y cierra; smtplib intenta otro método y solo ve la desconexión.
                         raise smtplib.SMTPAuthenticationError(535, b"sesion cerrada al autenticar") from None
-                s.send_message(msg)
+                try:
+                    s.send_message(msg)
+                except smtplib.SMTPNotSupportedError:
+                    # Aquí solo lo lanza una dirección con tildes o ñ que el servidor no admite (sin SMTPUTF8): es el
+                    # dato, no la configuración; reintentar no lo arregla.
+                    raise CorreoRechazado(
+                        "el servidor de correo no acepta direcciones con tildes o ñ: corrija el correo del cliente "
+                        "y reenvíe"
+                    ) from None
         except smtplib.SMTPAuthenticationError as e:
             # Configuración, no el destinatario: se reintenta para que, al corregir el .env, la cola se vacíe sola.
             raise CorreoTemporal(f"credenciales SMTP inválidas (código {e.smtp_code}); revise el .env") from None
