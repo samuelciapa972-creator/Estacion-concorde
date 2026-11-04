@@ -180,6 +180,7 @@ cuánto se vigila, no que sean de prueba.
 
 ### 8.1 Antes de empezar (todo en ✔)
 
+- [ ] Ensayo general en la estación con el banco de pruebas (`docs/ensayo-general.md`), sin pendientes graves.
 - [ ] Servidor, dominio y HTTPS funcionando (secciones 2 a 4). `make prod-verificar` todo en ✔.
 - [ ] Respaldo nocturno con copia **cifrada fuera del servidor**, y una restauración probada desde el remoto (sección 6).
 - [ ] Chequeo de disponibilidad avisando a una persona concreta (sección 7).

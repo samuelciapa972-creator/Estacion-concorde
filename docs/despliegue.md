@@ -5,6 +5,8 @@
 >
 > **Producción** (servidor de internet con dominio, worker de la DIAN en contenedor, respaldos, piloto): ver
 > `docs/despliegue-produccion.md`.
+>
+> **Ensayo en la estación** con este banco de pruebas (hoja para imprimir): `docs/ensayo-general.md`.
 
 ## 1. Qué se levanta
 
