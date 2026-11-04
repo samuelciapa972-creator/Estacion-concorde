@@ -161,6 +161,16 @@ docker compose --project-directory . -f infra/docker-compose.prod.yml exec -T db
 make prod
 ```
 
+**Después de restaurar, antes de facturar: la numeración.** Si el respaldo es de antes de las últimas facturas, la
+base "olvida" números que la DIAN ya tiene, y el sistema los volvería a usar. La DIAN responde "Regla 90: Documento
+procesado anteriormente" y esas ventas no se pueden facturar con ese número. Pasó en habilitación el 2026-11-04 con la
+SETP990000010, que alguien había enviado desde otra copia de la base. Por eso:
+- Comparar el `siguiente` de la numeración activa (`SELECT prefijo, siguiente FROM numeracion WHERE activa`) con el
+  último número EDSC que muestra el portal de la DIAN o el último correo de factura enviado. Si la base va atrás,
+  **no facturar** y consultar antes de tocar nada.
+- **Una sola base emite con EDSC.** El banco de pruebas (portátil) nunca se configura con la numeración de
+  producción, y nunca hay dos servidores de producción encendidos a la vez (p. ej. al migrar de proveedor).
+
 Las facturas se deben conservar por años. No borrar respaldos del remoto sin consultarlo con el contador.
 
 ## 7. Monitoreo
