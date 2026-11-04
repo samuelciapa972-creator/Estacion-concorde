@@ -222,8 +222,14 @@ cuánto se vigila, no que sean de prueba.
    - Nada PENDIENTE desde hace más de una hora.
 2. Cruzar las facturas del día con el cierre de turno: toda venta del piloto tiene su factura y ninguna está repetida.
 3. Abrir el correo de una factura del día: el ZIP y el PDF llegan y abren bien.
-4. Revisar `respaldo.log` y el heartbeat: el respaldo de anoche salió y se copió al remoto.
-5. Anotar cualquier problema en una bitácora del piloto (fecha, factura, qué pasó, qué se hizo).
+4. **Rebotes:** revisar el buzón de la cuenta que envía las facturas (`ESTACION_SMTP_USUARIO`). Si el correo de un cliente
+   no existe, el sistema marca la entrega como enviada (el servidor de correo la aceptó) y el aviso llega **solo a ese
+   buzón** ("No se ha encontrado la dirección" / "Mail Delivery Subsystem"). Por cada rebote:
+   1. Confirmar con el cliente su correo correcto (llamada o en la próxima visita).
+   2. En **Clientes**, botón **Correo** del cliente: escribir el correo corregido.
+   3. En **Facturación**, botón **Reenviar** de cada factura suya que rebotó: sale el mismo ZIP al correo nuevo.
+5. Revisar `respaldo.log` y el heartbeat: el respaldo de anoche salió y se copió al remoto.
+6. Anotar cualquier problema en una bitácora del piloto (fecha, factura, qué pasó, qué se hizo).
 
 ### 8.4 Cuándo ampliar y cuándo parar
 
