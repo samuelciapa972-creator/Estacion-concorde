@@ -25,7 +25,7 @@
 
 1. Copiar `.env.example` a `.env` en la raíz y llenar como mínimo:
    - `JWT_SECRETO`: `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`. Sin él la API **no arranca**, a propósito.
-   - `ESTACION_HOST`: los nombres o IPs por los que se entra, separados por coma, p. ej. `localhost, 192.168.1.50`.
+   - `ESTACION_HOST`: los nombres o IPs por los que se entra, separados por coma, p. ej. `ESTACION_HOST="localhost, 192.168.1.50"` (con comillas, por el espacio).
      Caddy emite un certificado para cada uno; si la tablet entra por una IP que no está aquí, el navegador lo rechaza.
    - `ESTACION_IP`: la IP de esa lista por la que entra la tablet (p. ej. `192.168.1.50`). Al entrar por IP el
      navegador no manda el nombre del servidor (SNI) y, sin esta variable, Caddy corta la conexión TLS.

@@ -24,7 +24,8 @@
 
 1. Conectar el portátil y la tablet a **la misma red** (el wifi de la pista).
 2. Ver la IP del portátil en esa red: `ip -4 addr` (algo como `192.168.x.y`).
-3. En el `.env`: `ESTACION_HOST=localhost, <esa IP>` y `ESTACION_IP=<esa IP>`. Luego `make stack`.
+3. En el `.env`: `ESTACION_HOST="localhost, <esa IP>"` (**con comillas**: tiene un espacio) y
+   `ESTACION_IP=<esa IP>`. Luego `make stack`.
 4. Si el portátil tiene firewall activo, permitir los puertos 80 y 443 en esa red.
 5. En la tablet: `https://<esa IP>/pista`. La CA de Caddy es la misma de la casa (mientras no se borre el volumen
    `caddy_data`), así que no hay que reinstalarla. Si el navegador advierte el certificado, revisar el paso 3.
