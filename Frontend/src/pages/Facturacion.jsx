@@ -54,6 +54,19 @@ export default function Facturacion() {
     }
   };
 
+  // Reenvía el MISMO ZIP al correo ACTUAL del cliente (p. ej. tras corregirlo en Clientes por un rebote).
+  const reenviar = async (f) => {
+    if (!window.confirm(`Reenviar ${f.numero} al correo actual del cliente?`)) return;
+    setDescarga({ id: `c${f.id}`, error: null });
+    try {
+      await api.reenviar(f.id);
+      setDescarga({ id: null, error: null });
+      setAviso(`${f.numero}: reenvío en cola. Sale en unos segundos al correo actual del cliente.`);
+    } catch (err) {
+      setDescarga({ id: null, error: err });
+    }
+  };
+
   // Tras anular, la fila pierde su botón: el foco pasa al aviso para no perderse.
   const anulada = async (nota) => {
     setAAnular(null);
@@ -126,6 +139,11 @@ export default function Facturacion() {
                 {f.estado === 'FACTURADO' && (
                   <Boton variante="chico" onClick={() => recibo(f)} disabled={descarga.id === `r${f.id}`} aria-label={`Imprimir el recibo de ${f.numero}`}>
                     {descarga.id === `r${f.id}` ? '...' : 'Recibo'}
+                  </Boton>
+                )}
+                {f.estado === 'FACTURADO' && usuario?.rol === 'ADMIN' && (
+                  <Boton variante="chico" onClick={() => reenviar(f)} disabled={descarga.id === `c${f.id}`} aria-label={`Reenviar por correo ${f.numero}`}>
+                    {descarga.id === `c${f.id}` ? '...' : 'Reenviar'}
                   </Boton>
                 )}
                 {puedeAnular(f, usuario) && (

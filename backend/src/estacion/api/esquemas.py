@@ -125,6 +125,10 @@ class ClienteEntrada(Esquema):
     autoriza_tratamiento: bool = Field(description="autorización de tratamiento de datos (Ley 1581 de 2012)")
 
 
+class CorreoClienteEntrada(Esquema):
+    email: str = Field(min_length=5, max_length=200, description="el correo corregido del cliente")
+
+
 class RegistroPublicoEntrada(ClienteEntrada):
     captcha: str | None = Field(
         default=None, max_length=4096, description="token del widget; obligatorio si la API tiene captcha configurado"

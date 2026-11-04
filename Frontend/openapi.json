@@ -408,6 +408,23 @@
         "title": "ConfiguracionPublicaSalida",
         "type": "object"
       },
+      "CorreoClienteEntrada": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "description": "el correo corregido del cliente",
+            "maxLength": 200,
+            "minLength": 5,
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "CorreoClienteEntrada",
+        "type": "object"
+      },
       "Creado": {
         "properties": {
           "id": {
@@ -2639,6 +2656,73 @@
           }
         ],
         "summary": "Reactivar un cliente",
+        "tags": [
+          "administración"
+        ]
+      }
+    },
+    "/clientes/{cliente_id}/correo": {
+      "post": {
+        "operationId": "corregir_correo_cliente_clientes__cliente_id__correo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cliente_id",
+            "required": true,
+            "schema": {
+              "title": "Cliente Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorreoClienteEntrada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteSalida"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Corregir el correo del cliente (p. ej. tras un rebote); luego se reenvía la factura",
         "tags": [
           "administración"
         ]

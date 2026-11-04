@@ -8,6 +8,7 @@ from decimal import Decimal
 import pytest
 
 from conftest import Api, clave, persona
+from estacion.api.rutas.clientes import enmascarar_correo as enmascarar
 
 pytestmark = pytest.mark.bd
 
@@ -188,6 +189,25 @@ def test_baja_logica_de_cliente(api):
         (str(cid),),
     )
     assert [a for a, _ in acciones] == ["CLIENTE_REGISTRADO", "CLIENTE_DESACTIVADO", "CLIENTE_ACTIVADO"]
+
+
+def test_corregir_el_correo_de_un_cliente(api):
+    # Ensayo 2026-11-04 (D7): un correo mal escrito rebota y la factura no le llega. El ADMIN lo corrige y reenvía.
+    cid = api.post("/clientes", persona(), como=api.bombero).json()["id"]
+    r = api.post(f"/clientes/{cid}/correo", {"email": " Ana.Nueva@Example.COM "}, como=api.admin)
+    assert r.status_code == 200, r.text
+    assert r.json()["email_enmascarado"] == enmascarar("ana.nueva@example.com")
+    assert api.e.datos.uno("SELECT email FROM cliente WHERE id = %s", (cid,)) == "ana.nueva@example.com"
+    malo = api.post(f"/clientes/{cid}/correo", {"email": "sin-arroba.com"}, como=api.admin)
+    assert malo.status_code == 422 and "sin-arroba" not in malo.text
+    assert api.post(f"/clientes/{cid}/correo", {"email": "x@y.co"}, como=api.bombero).status_code == 403
+    assert api.post("/clientes/999999/correo", {"email": "x@example.com"}, como=api.admin).status_code == 404
+    acciones = api.e.datos.bd.consultar(
+        "SELECT accion, detalle::text FROM auditoria WHERE entidad = 'cliente' AND entidad_id = %s ORDER BY id",
+        (str(cid),),
+    )
+    assert [a for a, _ in acciones] == ["CLIENTE_REGISTRADO", "CLIENTE_CORREO_CAMBIADO"]
+    assert all("example" not in (d or "").lower() for _, d in acciones)  # el correo no queda en la auditoría
 
 
 # ------------------------------------------------------------------------------------------ vehículos

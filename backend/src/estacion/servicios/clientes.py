@@ -15,7 +15,7 @@ from datetime import datetime
 
 from psycopg import errors
 
-from ..facturacion.documentos import ClienteInvalido, calcular_dv, validar_cliente
+from ..facturacion.documentos import ClienteInvalido, calcular_dv, correo_valido, validar_cliente
 from ..facturacion.modelos import Cliente
 from ._bd import Conexion, auditar, exigir_autocommit
 
@@ -181,4 +181,21 @@ def cambiar_activo(conn: Conexion, cliente_id: int, activo: bool, *, usuario_id:
             return None
         auditar(conn, "CLIENTE_ACTIVADO" if activo else "CLIENTE_DESACTIVADO", "cliente", cliente_id,
                 usuario_id=usuario_id)  # fmt: skip
+        return ClienteRegistrado(*fila)
+
+
+def cambiar_correo(conn: Conexion, cliente_id: int, email: str, *, usuario_id: int) -> ClienteRegistrado | None:
+    """Corrige el correo (p. ej. tras un rebote) para reenviar la factura. None si no existe. Lanza ClienteInvalido.
+    La auditoría dice quién lo cambió, nunca el correo (Ley 1581)."""
+    email = email.strip().lower()
+    if not correo_valido(email):
+        raise ClienteInvalido(["el correo no es válido"])
+    exigir_autocommit(conn)
+    with conn.transaction():
+        fila = conn.execute(
+            f"UPDATE cliente SET email = %s WHERE id = %s RETURNING {_COLUMNAS}", (email, cliente_id)
+        ).fetchone()
+        if fila is None:
+            return None
+        auditar(conn, "CLIENTE_CORREO_CAMBIADO", "cliente", cliente_id, usuario_id=usuario_id)
         return ClienteRegistrado(*fila)

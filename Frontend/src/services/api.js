@@ -139,6 +139,7 @@ export const api = {
   facturaPdf: (id) => archivo(`/facturas/${id}/pdf`),
   facturaRecibo: async (id) => new Uint8Array(await (await pedir("GET", `/facturas/${id}/recibo`)).arrayBuffer()),
   anular: (id, { clave, motivo }) => json("POST", `/facturas/${id}/anular`, { clave, motivo }),
+  reenviar: (id) => json("POST", `/facturas/${id}/reenviar`),
 
   // público (registro por QR)
   configuracionPublica: () => json("GET", "/publico/configuracion"),
@@ -152,6 +153,7 @@ export const api = {
   desactivarUsuario: (id) => json("POST", `/usuarios/${id}/desactivar`),
   clientes: (f) => json("GET", "/clientes" + consulta(f)),
   activarCliente: (id, activo) => json("POST", `/clientes/${id}/${activo ? "activar" : "desactivar"}`),
+  corregirCorreoCliente: (id, email) => json("POST", `/clientes/${id}/correo`, { email }),
   vehiculos: (f) => json("GET", "/vehiculos" + consulta(f)),
   crearVehiculo: (v) => json("POST", "/vehiculos", v),
   activarVehiculo: (id, activo) => json("POST", `/vehiculos/${id}/${activo ? "activar" : "desactivar"}`),

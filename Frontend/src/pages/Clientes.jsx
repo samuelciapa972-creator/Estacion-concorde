@@ -119,6 +119,16 @@ function ListaClientes({ onVehiculos }) {
     listado.ejecutar(() => api.activarCliente(c.id, !c.activo), `Cliente ${c.nombre_mostrar} ${c.activo ? 'desactivado' : 'activado'}.`);
   };
 
+  // Tras un rebote: se corrige el correo y, en Facturación, se usa Reenviar (la factura sale al correo nuevo).
+  const corregirCorreo = (c) => {
+    const email = window.prompt(`Correo nuevo de ${c.nombre_mostrar} (actual: ${c.email_enmascarado}):`);
+    if (!email || !email.trim()) return;
+    listado.ejecutar(
+      () => api.corregirCorreoCliente(c.id, email.trim()),
+      `Correo de ${c.nombre_mostrar} actualizado. Para que le llegue una factura anterior, use Reenviar en Facturación.`,
+    );
+  };
+
   return (
     <div>
       <Encabezado titulo="Clientes" subtitulo="Registrados por QR o desde la pista, con autorización de datos" />
@@ -138,10 +148,15 @@ function ListaClientes({ onVehiculos }) {
                   <Activo activo={c.activo} />
                 </Celda>
                 <Celda alinear="center" style={{ whiteSpace: 'nowrap' }}>
-                  <Boton variante="chico" onClick={() => onVehiculos(c)} style={{ marginRight: '6px' }}>
-                    Vehículos
-                  </Boton>
-                  <BotonActivo activo={c.activo} onClick={() => cambiarActivo(c)} />
+                  <div className="acciones-fila">
+                    <Boton variante="chico" onClick={() => onVehiculos(c)}>
+                      Vehículos
+                    </Boton>
+                    <Boton variante="chico" onClick={() => corregirCorreo(c)} aria-label={`Corregir el correo de ${c.nombre_mostrar}`}>
+                      Correo
+                    </Boton>
+                    <BotonActivo activo={c.activo} onClick={() => cambiarActivo(c)} />
+                  </div>
                 </Celda>
               </tr>
             ))}

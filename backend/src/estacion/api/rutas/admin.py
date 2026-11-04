@@ -26,6 +26,7 @@ from ..esquemas import (
     BusquedaVentasSalida,
     ClienteSalida,
     ClientesPaginaSalida,
+    CorreoClienteEntrada,
     Error,
     EstadoFacturacion,
     FormaPago,
@@ -205,6 +206,21 @@ def desactivar_cliente(cliente_id: int, conn: Conn, sesion: SesionAdmin) -> Clie
 )
 def activar_cliente(cliente_id: int, conn: Conn, sesion: SesionAdmin) -> ClienteSalida:
     return _cliente_activo(conn, sesion, cliente_id, True)
+
+
+@router.post(
+    "/clientes/{cliente_id}/correo",
+    response_model=ClienteSalida,
+    responses={404: {"model": Error}, 422: {"model": Error}},
+    summary="Corregir el correo del cliente (p. ej. tras un rebote); luego se reenvía la factura",
+)
+def corregir_correo_cliente(
+    cliente_id: int, datos: CorreoClienteEntrada, conn: Conn, sesion: SesionAdmin
+) -> ClienteSalida:
+    c = clientes.cambiar_correo(conn, cliente_id, datos.email, usuario_id=sesion.usuario_id)  # inválido -> 422
+    if c is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no existe ese cliente")
+    return cliente_salida(c)
 
 
 # ------------------------------------------------------------------------------------------ vehículos

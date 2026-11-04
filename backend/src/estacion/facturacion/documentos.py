@@ -14,6 +14,10 @@ _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 TIPOS_DOCUMENTO = {"CC", "NIT", "NIT_EXTERIOR", "CE", "PA", "PPT"}
 
 
+def correo_valido(correo: str) -> bool:
+    return bool(_EMAIL.match(correo.strip()))
+
+
 class ClienteInvalido(ValueError):
     def __init__(self, problemas: list[str]):
         super().__init__("; ".join(problemas))
@@ -62,7 +66,7 @@ def validar_cliente(c: Cliente) -> None:
         p.append("falta el nombre")
     if c.tipo_documento != "NIT" and not c.apellidos.strip():
         p.append("faltan los apellidos")
-    if not _EMAIL.match(c.email.strip()):
+    if not correo_valido(c.email):
         p.append("el correo no es válido")
     if not c.autoriza_tratamiento_datos:
         p.append("falta la autorización de tratamiento de datos (Ley 1581 de 2012)")
