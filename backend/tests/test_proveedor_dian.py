@@ -122,6 +122,23 @@ def test_documento_procesado_anteriormente_es_incierto():
         proveedor(c, test_set_id=None).emitir(solicitud())
 
 
+@pytest.mark.parametrize(
+    "respuesta",
+    [
+        RespuestaDian(False, "98", "Intente más tarde", (), None, ""),  # visto en habilitación el 2026-11-04
+        RespuestaDian(False, "99", "Errores", ("Intente más tarde",), None, ""),
+    ],
+)
+def test_intente_mas_tarde_es_incierto_no_rechazo(respuesta):
+    # "98 Intente más tarde" es la DIAN ocupada, no un problema del documento: rechazarlo dejaba la venta pendiente
+    # para revisión humana. Incierto = se concilia por CUFE y se reintenta solo (ver servicios/outbox.py).
+    c = ClienteFalso(enviar_sincrono=respuesta, estado=respuesta)
+    with pytest.raises(ProveedorIncierto, match="más tarde"):
+        proveedor(c, test_set_id=None).emitir(solicitud())
+    with pytest.raises(ProveedorIncierto, match="más tarde"):
+        consultar(proveedor(c), track_id=None)
+
+
 def test_valida_sin_application_response_no_falla():
     # Review Focus 5: la factura es válida aunque falte el XML de respuesta; la entrega lo manejará.
     c = ClienteFalso(enviar_sincrono=RespuestaDian(True, "00", "OK", (), None, "cufe-1"))

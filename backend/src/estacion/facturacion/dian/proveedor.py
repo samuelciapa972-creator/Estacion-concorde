@@ -5,6 +5,7 @@ Modos:
     normal: SendBillSync -> resultado inmediato.
 Conciliación: con track id, GetStatusZip; sin él, GetStatus por CUFE.
 "Documento procesado anteriormente" (un reintento tras una caída) NO es un rechazo: es incierto y se concilia.
+"98 Intente más tarde" (la DIAN ocupada) tampoco: es incierto; la cola concilia por CUFE y reintenta con espera.
 Nombres del ZIP y del XML: la convención de `paquete.nombre_archivo` con el consecutivo de la factura.
 """
 
@@ -25,6 +26,8 @@ from ..proveedor import ProveedorIncierto, ProveedorNoConfigurado, ProveedorRech
 from .cliente import ClienteDian, ErrorSeguridadDian, ErrorTransporteDian, RespuestaDian
 
 _YA_PROCESADO = re.compile(r"procesado anteriormente", re.IGNORECASE)
+_INTENTE_MAS_TARDE = re.compile(r"intente m[aá]s tarde", re.IGNORECASE)
+_CODIGO_REINTENTAR = "98"  # visto en habilitación (2026-11-04) con la descripción "Intente más tarde"
 _NUMERO = re.compile(r"^([A-Z0-9]*?)(\d+)$")
 
 
@@ -120,6 +123,8 @@ class ProveedorDian:
         mensajes = "; ".join(r.errores) or f"{r.codigo} {r.descripcion}".strip()
         if _YA_PROCESADO.search(mensajes):
             raise ProveedorIncierto(f"la DIAN dice que el documento ya se procesó: {mensajes}")
+        if r.codigo == _CODIGO_REINTENTAR or _INTENTE_MAS_TARDE.search(mensajes):
+            raise ProveedorIncierto(f"la DIAN pide reintentar más tarde: {mensajes}")
         if r.no_encontrado:
             return None
         if r.en_proceso:
