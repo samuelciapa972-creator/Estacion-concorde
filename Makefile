@@ -9,6 +9,9 @@
 #   make format        aplica el formato de ruff
 #   make db-reset      BORRA la base de desarrollo y la recrea con las migraciones
 #   make simulador     surtidor simulado: un despacho cada 20 s en la base de desarrollo (Ctrl+C para parar)
+#   make nexus         lee las ventas REALES del Wayne desde Nexus (IMED, solo lectura) cada 15 s y las guarda como
+#                      despachos para facturarlas en la pista (pruebas en habilitación; el PC en la red de la pista)
+#   make nexus-seco    lo mismo, pero solo las muestra: no guarda nada
 #   make api           API en http://127.0.0.1:8000 (documentación en /docs); necesita JWT_SECRETO
 #   make worker        procesa la cola de envíos con el proveedor SIMULADO (no envía nada a la DIAN)
 #   make worker-dian   procesa la cola enviando a la DIAN según DIAN_AMBIENTE (2 habilitación, 1 producción; certificado real en .env)
@@ -61,7 +64,7 @@ DATABASE_URL ?= postgresql://estacion:estacion@localhost:5432/estacion
 export DATABASE_URL
 
 .PHONY: install up migrate down db-reset test test-back test-rapido test-web lint lint-back lint-web format \
-        simulador worker worker-dian habilitacion-probar verificar-produccion guardar-clave-tecnica configurar-produccion mail correo-prueba certificado api web web-build tipos stack stack-simulador stack-logs stack-down stack-usuario ca
+        simulador nexus nexus-seco worker worker-dian habilitacion-probar verificar-produccion guardar-clave-tecnica configurar-produccion mail correo-prueba certificado api web web-build tipos stack stack-simulador stack-logs stack-down stack-usuario ca
 
 install:
 	cd $(BACK) && uv venv --python 3.12 $(VENV) && uv pip install --python $(PY) -e ".[dev]"
@@ -113,6 +116,13 @@ format:
 
 simulador:
 	cd $(BACK) && $(PY) -m estacion.simulador --cada 20s
+
+# NEXUS_URL en el .env si la Raspberry no está en http://192.168.10.101
+nexus:
+	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.nexus --cada 15s
+
+nexus-seco:
+	cd $(BACK) && set -a && { [ ! -f ../.env ] || . ../.env; } && set +a && $(PY) -m estacion.nexus --cada 15s --en-seco
 
 # Leen DIAN_* y DIAN_CERTIFICADO_* del .env (si existe). El worker no arranca sin DIAN_AMBIENTE válido.
 worker:
