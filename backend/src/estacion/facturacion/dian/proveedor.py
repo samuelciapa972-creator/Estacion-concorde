@@ -22,7 +22,7 @@ from typing import Literal
 from ..firma import ZONA_COLOMBIA
 from ..modelos import EnvioPendiente, ResultadoEmision, SolicitudFactura
 from ..paquete import nombre_archivo
-from ..proveedor import ProveedorIncierto, ProveedorNoConfigurado, ProveedorRechazo
+from ..proveedor import ProveedorIncierto, ProveedorNoConfigurado, ProveedorNumeroProcesado, ProveedorRechazo
 from .cliente import ClienteDian, ErrorSeguridadDian, ErrorTransporteDian, RespuestaDian
 
 _YA_PROCESADO = re.compile(r"procesado anteriormente", re.IGNORECASE)
@@ -122,7 +122,7 @@ class ProveedorDian:
             )  # fmt: skip
         mensajes = "; ".join(r.errores) or f"{r.codigo} {r.descripcion}".strip()
         if _YA_PROCESADO.search(mensajes):
-            raise ProveedorIncierto(f"la DIAN dice que el documento ya se procesó: {mensajes}")
+            raise ProveedorNumeroProcesado(f"la DIAN dice que el documento ya se procesó: {mensajes}")
         if r.codigo == _CODIGO_REINTENTAR or _INTENTE_MAS_TARDE.search(mensajes):
             raise ProveedorIncierto(f"la DIAN pide reintentar más tarde: {mensajes}")
         if r.no_encontrado:

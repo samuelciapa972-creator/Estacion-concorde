@@ -24,6 +24,12 @@ Resultados de CONSULTAR_DIAN (por CUFE, o por el track id de un envío asíncron
     no existe       -> se sabe que NO se emitió: factura y origen EN_PROCESO, y se encola ENVIAR_DIAN
     sin respuesta   -> reintento con espera creciente; al agotar los intentos, FALLIDO (revisión humana)
 
+Número usado por OTRO documento: si el envío dijo "procesado anteriormente" (Regla 90) y la consulta por NUESTRO CUFE
+dice "no existe", la DIAN tiene otro documento con ese número (lo envió otra base). Una vez puede ser un reintento
+nuestro con la consulta atrasada, así que se reenvía igual; a la segunda confirmación (`_CONFIRMACIONES_NUMERO_USADO`)
+la factura toma el SIGUIENTE consecutivo (`emision.renumerar`), se reenvía y se audita FACTURA_RENUMERADA con el número
+anterior, que queda como hueco. Solo facturas: una nota crédito con ese problema sigue el camino normal (revisión).
+
 Antes de emitir, el documento se FIRMA (`facturacion/firma.py`) y se guarda en `factura.xml_firmado` en su PROPIA
 transacción, confirmada antes de hablar con la DIAN: si el proceso muere a mitad del envío, el reintento manda ese mismo
 documento (no uno firmado de nuevo, con otra hora de firma). Sin certificado
@@ -50,6 +56,7 @@ La factura sigue FACTURADA pase lo que pase con el correo: ante la DIAN ya es v�
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -70,14 +77,20 @@ from ..facturacion.modelos import (
     SolicitudFactura,
     TipoTrabajo,
 )
-from ..facturacion.proveedor import ProveedorFacturacion, ProveedorNoConfigurado, ProveedorRechazo
+from ..facturacion.proveedor import (
+    ProveedorFacturacion,
+    ProveedorNoConfigurado,
+    ProveedorNumeroProcesado,
+    ProveedorRechazo,
+)
 from ..facturacion.representacion import RepresentacionInvalida, texto_validacion
 from . import entrega
 from ._bd import Conexion, ahora_local, auditar, encolar, exigir_autocommit
-from .emision import Origen, leer_cliente, leer_origen
+from .emision import Origen, leer_cliente, leer_origen, renumerar
 
 log = logging.getLogger(__name__)
 _LARGO_ERROR = 500  # los errores se guardan recortados; nunca llevan secretos ni datos personales
+_CONFIRMACIONES_NUMERO_USADO = 2  # "procesado anteriormente" + "no existe", seguidos, antes de gastar otro número
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +113,7 @@ class Recursos:
     enviador: EnviadorCorreo
     error_certificado: str = ""
     ambiente: str = "2"  # DIAN_AMBIENTE del worker: solo se envían/consultan facturas de ESTE ambiente
+    entorno: Mapping[str, str] | None = None  # variables DIAN_* para rehacer el XML al renumerar (None: os.environ)
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,7 +196,7 @@ def _procesar_uno(
                 elif tipo == TipoTrabajo.ENVIAR_CORREO:
                     estado, preparado = _entregar(conn, politica, trabajo_id, intentos, factura, recursos)
                 else:
-                    estado = _consultar(conn, proveedor, politica, trabajo_id, intentos, factura)
+                    estado = _consultar(conn, proveedor, politica, trabajo_id, intentos, factura, recursos)
         except Exception as e:  # frontera de la cola: un trabajo roto no puede detener a los demás
             # Solo el tipo del error: su mensaje podría llevar datos personales (Ley 1581).
             log.error("trabajo %s (%s) de la factura %s: error inesperado %s", trabajo_id, tipo, factura_id,
@@ -370,6 +384,7 @@ def _consultar(
     trabajo_id: int,
     intentos: int,
     f: _Factura,
+    recursos: Recursos,
 ) -> EstadoFactura:
     try:
         resultado = proveedor.consultar(clave=f.clave, numero=f.numero, cufe=f.cufe, track_id=f.track_id)
@@ -390,7 +405,9 @@ def _consultar(
     # Se sabe que NO quedó emitida: se reenvía la misma factura (mismo número, misma clave). Un envío que falla
     # siempre igual no puede rebotar ENVIAR <-> CONSULTAR sin fin: el primer reenvío es inmediato, los siguientes
     # esperan según la política y, al agotarla, queda para revisión humana.
-    reenvios = _reenvios(conn, f.id)
+    if f.tipo == "FACTURA" and _desde_la_solicitud(conn, f.id, "DIAN_NUMERO_PROCESADO") >= _CONFIRMACIONES_NUMERO_USADO:
+        return _renumerar(conn, trabajo_id, f, recursos)
+    reenvios = _desde_la_solicitud(conn, f.id, "FACTURA_NO_EMITIDA_REENVIO")
     if reenvios + 1 >= politica.max_intentos:
         _terminar(conn, trabajo_id, "FALLIDO", error=f"la DIAN no tiene la factura tras {reenvios + 1} envíos")
         auditar(conn, "REENVIOS_AGOTADOS", "factura", f.id, detalle={"numero": f.numero, "envios": reenvios + 1})
@@ -402,17 +419,40 @@ def _consultar(
     return EstadoFactura.EN_PROCESO
 
 
-def _reenvios(conn: Conexion, factura_id: int) -> int:
-    """Reenvíos por "no existe" desde la última solicitud de esta factura (la auditoría es el registro)."""
+def _desde_la_solicitud(conn: Conexion, factura_id: int, accion: str) -> int:
+    """Veces que se auditó `accion` desde la última solicitud, reenvío o renumeración de esta factura (la auditoría es
+    el registro)."""
     fila = conn.execute(
         """SELECT count(*) FROM auditoria a
-           WHERE a.entidad = 'factura' AND a.entidad_id = %(id)s AND a.accion = 'FACTURA_NO_EMITIDA_REENVIO'
+           WHERE a.entidad = 'factura' AND a.entidad_id = %(id)s AND a.accion = %(accion)s
              AND a.id > coalesce((SELECT max(b.id) FROM auditoria b
                                   WHERE b.entidad = 'factura' AND b.entidad_id = %(id)s
-                                    AND b.accion IN ('FACTURA_SOLICITADA', 'FACTURA_REENVIADA')), 0)""",
-        {"id": str(factura_id)},
+                                    AND b.accion IN ('FACTURA_SOLICITADA', 'FACTURA_REENVIADA',
+                                                     'FACTURA_RENUMERADA')), 0)""",
+        {"id": str(factura_id), "accion": accion},
     ).fetchone()
     return int(fila[0]) if fila else 0
+
+
+def _renumerar(conn: Conexion, trabajo_id: int, f: _Factura, recursos: Recursos) -> EstadoFactura:
+    """El número lo tiene OTRO documento en la DIAN: la factura toma el siguiente consecutivo y se vuelve a enviar."""
+    try:
+        with conn.transaction():  # si no se puede (numeración agotada, configuración), no queda nada a medias
+            anterior, nuevo = renumerar(conn, f.id, entorno=recursos.entorno)
+    except Exception as e:
+        _terminar(
+            conn, trabajo_id, "FALLIDO",
+            error=f"el número {f.numero} lo tiene otro documento en la DIAN y no se pudo renumerar: "
+            f"{type(e).__name__}: {e}",
+        )  # fmt: skip
+        auditar(conn, "RENUMERACION_FALLIDA", "factura", f.id, detalle={"numero": f.numero})
+        return f.estado
+    _marcar(conn, f, EstadoFactura.EN_PROCESO, EstadoFacturacion.EN_PROCESO)
+    _terminar(conn, trabajo_id, "HECHO")
+    encolar(conn, f.id, TipoTrabajo.ENVIAR_DIAN)
+    auditar(conn, "FACTURA_RENUMERADA", "factura", f.id, detalle={"numero_anterior": anterior, "numero": nuevo})
+    log.warning("factura %s: el número %s lo tiene otro documento en la DIAN; se renumeró a %s", f.id, anterior, nuevo)
+    return EstadoFactura.EN_PROCESO
 
 
 def _aceptada(conn: Conexion, trabajo_id: int, f: _Factura, resultado: ResultadoEmision) -> EstadoFactura:
@@ -594,6 +634,8 @@ def _incierta(conn: Conexion, trabajo_id: int, f: _Factura, e: Exception) -> Non
     _terminar(conn, trabajo_id, "HECHO", error=error)
     encolar(conn, f.id, TipoTrabajo.CONSULTAR_DIAN)
     auditar(conn, "FACTURA_INCIERTA", "factura", f.id, detalle={"numero": f.numero})
+    if isinstance(e, ProveedorNumeroProcesado):  # la consulta decide si es nuestro documento u otro (ver _consultar)
+        auditar(conn, "DIAN_NUMERO_PROCESADO", "factura", f.id, detalle={"numero": f.numero})
 
 
 def _marcar(

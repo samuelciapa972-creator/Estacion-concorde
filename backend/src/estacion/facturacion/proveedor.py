@@ -20,6 +20,11 @@ class ProveedorIncierto(Exception):
     """No se sabe si la factura se emitió (timeout, corte de red tras enviar...)."""
 
 
+class ProveedorNumeroProcesado(ProveedorIncierto):
+    """La DIAN ya tiene un documento con este número ("procesado anteriormente", Regla 90). Puede ser el nuestro (un
+    reintento tras perder la respuesta) u OTRO (el número lo usó otra base): la consulta por CUFE lo decide."""
+
+
 class ProveedorNoConfigurado(Exception):
     """El proveedor no aceptó la conexión (certificado, firma del mensaje, reloj): es configuración corregible y no
     dice nada de la factura. La cola reintenta y avisa."""

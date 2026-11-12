@@ -11,7 +11,7 @@ import pytest
 from conftest import ENTORNO_DIAN, Escenario
 from estacion import worker
 from estacion.facturacion.modelos import EstadoFactura, ResultadoEmision, SolicitudFactura, TipoTrabajo
-from estacion.facturacion.proveedor import ProveedorSimulado
+from estacion.facturacion.proveedor import ProveedorNumeroProcesado, ProveedorSimulado
 from estacion.servicios.emision import Origen, ServicioEmision
 from estacion.servicios.outbox import PoliticaReintentos, procesar_pendientes, procesar_siguiente
 
@@ -500,6 +500,85 @@ def test_reenvios_por_inciertos_repetidos_esperan_y_se_detienen(escenario, conn,
     assert cola(escenario, f.id)[-1][:2] == ("CONSULTAR_DIAN", "FALLIDO")
     assert "REENVIOS_AGOTADOS" in acciones(escenario, f.id)
     assert procesar_siguiente(conn, proveedor, politica, recursos=recursos) is None  # nada más en la cola
+
+
+class ProveedorConNumerosUsados(ProveedorSimulado):
+    """La DIAN ya tiene OTRO documento con estos números (los envió otra base): "procesado anteriormente" y, como no
+    es el nuestro, la consulta por nuestro CUFE no lo encuentra."""
+
+    def __init__(self, *usados: str):
+        super().__init__()
+        self.usados = set(usados)
+        self.enviados: list[str] = []
+
+    def emitir(self, solicitud):
+        self.enviados.append(solicitud.numero)
+        if solicitud.numero in self.usados:
+            raise ProveedorNumeroProcesado("Regla: 90, Rechazo: Documento procesado anteriormente.")
+        return super().emitir(solicitud)
+
+
+def test_numero_usado_por_otro_documento_se_renumera_y_la_venta_se_factura(escenario, conn, recursos):
+    f, origen = solicitar(escenario, conn)
+    proveedor = ProveedorConNumerosUsados("SETP1")
+
+    procesar_pendientes(conn, proveedor, recursos=dataclasses.replace(recursos, entorno=ENTORNO_DIAN))
+
+    # Una sola vez no basta (pudo ser un reintento nuestro y la consulta ir atrasada): se reenvía igual. A la segunda
+    # confirmación se toma el siguiente consecutivo; SETP1 queda como hueco, registrado en la auditoría.
+    assert proveedor.enviados == ["SETP1", "SETP1", "SETP2"]
+    estado, error, _, numero, _ = factura(escenario, f.id)
+    assert (estado, error, numero) == ("FACTURADO", None, "SETP2")
+    assert origen_estado(escenario, origen) == "FACTURADO"
+    cufe, xml = escenario.datos.conn.execute("SELECT cufe, xml_firmado FROM factura WHERE id = %s", (f.id,)).fetchone()
+    assert cufe != f.cufe and "SETP2" in xml and "SETP1<" not in xml
+    detalle = escenario.datos.uno(
+        "SELECT detalle FROM auditoria WHERE entidad = 'factura' AND entidad_id = %s AND accion = 'FACTURA_RENUMERADA'",
+        (str(f.id),),
+    )
+    assert (detalle["numero_anterior"], detalle["numero"]) == ("SETP1", "SETP2")
+    assert acciones(escenario, f.id)[-2:] == ["FACTURA_EMITIDA", "FACTURA_ENTREGADA"]
+
+
+def test_numero_usado_no_gasta_otro_consecutivo_si_la_dian_lo_encuentra(escenario, conn, recursos):
+    # "Procesado anteriormente" porque NUESTRO envío anterior sí llegó: la consulta lo encuentra y no se renumera.
+    f, _ = solicitar(escenario, conn)
+    proveedor = ProveedorConNumerosUsados()
+    proveedor.emitir(_solicitud_de(escenario, f.id))  # ya emitida (se perdió la respuesta)
+    proveedor.usados.add("SETP1")
+
+    procesar_pendientes(conn, proveedor, recursos=dataclasses.replace(recursos, entorno=ENTORNO_DIAN))
+
+    assert factura(escenario, f.id)[0] == "FACTURADO" and factura(escenario, f.id)[3] == "SETP1"
+    assert "FACTURA_RENUMERADA" not in acciones(escenario, f.id)
+
+
+def test_numero_usado_sin_numeracion_disponible_queda_para_revision_sin_nada_a_medias(escenario, conn, recursos):
+    f, origen = solicitar(escenario, conn)
+    escenario.datos.conn.execute("UPDATE numeracion SET hasta = siguiente - 1 WHERE activa")  # agotada
+    siguiente = "SELECT siguiente FROM numeracion WHERE activa"
+    antes = escenario.datos.uno(siguiente)
+
+    procesar_pendientes(
+        conn, ProveedorConNumerosUsados("SETP1"), recursos=dataclasses.replace(recursos, entorno=ENTORNO_DIAN)
+    )
+
+    estado, _, _, numero, _ = factura(escenario, f.id)
+    assert (numero, escenario.datos.uno(siguiente)) == ("SETP1", antes)  # ni número nuevo ni consecutivo gastado
+    assert escenario.datos.uno("SELECT cufe FROM factura WHERE id = %s", (f.id,)) == f.cufe
+    assert cola(escenario, f.id)[-1][:2] == ("CONSULTAR_DIAN", "FALLIDO")
+    assert "RENUMERACION_FALLIDA" in acciones(escenario, f.id)
+    assert procesar_siguiente(conn, ProveedorSimulado(), recursos=recursos) is None  # no queda dando vueltas
+
+
+def _solicitud_de(e: Escenario, factura_id: int) -> SolicitudFactura:
+    clave, numero, cufe = e.datos.conn.execute(
+        "SELECT clave_emision, numero, cufe FROM factura WHERE id = %s", (factura_id,)
+    ).fetchone()
+    return SolicitudFactura(
+        clave=clave, cliente=None, lineas=(), forma_pago="CONTADO", medio_pago="EFECTIVO",  # type: ignore[arg-type]
+        fecha_emision=AHORA, numero=numero, cufe=cufe,
+    )  # fmt: skip
 
 
 def test_el_segundo_reenvio_espera(escenario, conn, recursos):

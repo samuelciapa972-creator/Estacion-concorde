@@ -37,7 +37,7 @@ from ..facturacion.modelos import (
     SolicitudFactura,
     TipoTrabajo,
 )
-from ..facturacion.xml_factura import construir_factura
+from ..facturacion.xml_factura import FacturaXml, construir_factura
 from ._bd import Conexion, ahora_local, auditar, encolar, exigir_autocommit
 from .configuracion import ConfiguracionIncompleta, cargar_configuracion
 from .numeracion import ConsecutivoAsignado, asignar_consecutivo
@@ -173,6 +173,71 @@ def _existe(conn: Conexion, sql: str, valor: int) -> bool:
     return conn.execute(sql, (valor,)).fetchone() is not None
 
 
+def _construir_xml(
+    conn: Conexion, solicitud: SolicitudFactura, asignado: ConsecutivoAsignado, entorno: Mapping[str, str]
+) -> tuple[FacturaXml, str]:
+    """(XML sin firmar con su CUFE, ambiente DIAN de la numeración)."""
+    config = cargar_configuracion(conn, asignado.numeracion_id, entorno)
+    xml = construir_factura(
+        solicitud,
+        consecutivo=asignado.consecutivo,
+        emisor=config.emisor,
+        numeracion=config.numeracion,
+        software=config.software,
+    )
+    return xml, config.software.ambiente
+
+
+def renumerar(
+    conn: Conexion,
+    factura_id: int,
+    *,
+    entorno: Mapping[str, str] | None = None,
+    reloj: Callable[[], datetime] = ahora_local,
+) -> tuple[str, str]:
+    """Le da el SIGUIENTE consecutivo a una factura cuyo número ya tiene OTRO documento en la DIAN (lo usó otra base).
+    El número anterior queda como hueco; el llamador lo audita. Rehace el XML (número, fecha y CUFE nuevos) y borra lo
+    firmado: la cola lo vuelve a firmar y enviar. Devuelve (número anterior, número nuevo).
+
+    Va DENTRO de la transacción del worker, que ya bloqueó la factura. Orden de bloqueo: factura -> numeración (la
+    venta no se bloquea: está EN_PROCESO o INCIERTO, así que `solicitar` no la toca)."""
+    fila = conn.execute(
+        """SELECT clave_emision, despacho_id, venta_manual_id, cliente_id, medio_pago, numero, tipo
+           FROM factura WHERE id = %s""",
+        (factura_id,),
+    ).fetchone()
+    if fila is None:
+        raise ValueError(f"no existe la factura {factura_id}")
+    clave, despacho_id, venta_id, cliente_id, medio_pago, anterior, tipo = fila
+    if tipo != "FACTURA":
+        raise ValueError("solo se renumera una factura (una nota crédito usa su propia numeración)")
+    origen = Origen("despacho", despacho_id) if despacho_id is not None else Origen("venta_manual", venta_id)
+    estacion_id = conn.execute("SELECT id FROM estacion WHERE activa").fetchone()
+    if estacion_id is None:
+        raise ConfiguracionIncompleta("no hay una estación (emisor) activa configurada")
+    fecha = reloj().replace(microsecond=0)
+    asignado = asignar_consecutivo(conn, estacion_id[0], fecha.date())
+    datos = leer_origen(conn, origen, bloquear=False)
+    solicitud = SolicitudFactura(
+        clave=clave,
+        cliente=leer_cliente(conn, cliente_id, solo_activos=False),  # ya era una factura: no se le niega por la baja
+        lineas=(datos.linea,),
+        forma_pago=datos.forma_pago,
+        medio_pago=medio_pago,
+        fecha_emision=fecha,
+    )
+    xml, ambiente = _construir_xml(conn, solicitud, asignado, os.environ if entorno is None else entorno)
+    conn.execute(
+        """UPDATE factura SET numeracion_id = %s, prefijo = %s, consecutivo = %s, fecha_emision = %s, cufe = %s,
+                  xml_sin_firmar = %s, ambiente = %s, xml_firmado = NULL, respuesta_dian = NULL,
+                  application_response = NULL, dian_track_id = NULL, error = NULL, actualizada_en = now()
+           WHERE id = %s""",
+        (asignado.numeracion_id, asignado.prefijo, asignado.consecutivo, fecha, xml.cufe, xml.xml.decode("utf-8"),
+         ambiente, factura_id),
+    )  # fmt: skip
+    return anterior, asignado.numero
+
+
 class ServicioEmision:
     def __init__(
         self,
@@ -238,7 +303,6 @@ class ServicioEmision:
                 asignado = asignar_consecutivo(conn, estacion_id[0], fecha.date())
 
             # 4. Configuración fiscal y XML. Cualquier falta aborta la transacción: el consecutivo vuelve.
-            config = cargar_configuracion(conn, asignado.numeracion_id, self._entorno)
             solicitud = SolicitudFactura(
                 clave=clave,
                 cliente=leer_cliente(conn, cliente_id),
@@ -247,13 +311,7 @@ class ServicioEmision:
                 medio_pago=medio_pago,
                 fecha_emision=fecha,
             )
-            xml = construir_factura(
-                solicitud,
-                consecutivo=asignado.consecutivo,
-                emisor=config.emisor,
-                numeracion=config.numeracion,
-                software=config.software,
-            )
+            xml, ambiente = _construir_xml(conn, solicitud, asignado, self._entorno)
             xml_texto = xml.xml.decode("utf-8")
 
             # 5. Guardar la factura, marcar el origen y encolar el envío.
@@ -265,7 +323,7 @@ class ServicioEmision:
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
                     (clave, origen.id, cliente_id, usuario_id, asignado.numeracion_id, asignado.prefijo,
                      asignado.consecutivo, datos.forma_pago, medio_pago, solicitud.total, fecha, xml.cufe,
-                     xml_texto, config.software.ambiente),
+                     xml_texto, ambiente),
                 ).fetchone()[0]  # type: ignore[index]  # fmt: skip
                 accion = "FACTURA_SOLICITADA"
             else:
@@ -277,7 +335,7 @@ class ServicioEmision:
                               error = NULL, actualizada_en = now()
                        WHERE id = %s""",
                     (clave, cliente_id, usuario_id, datos.forma_pago, medio_pago, solicitud.total, fecha, xml.cufe,
-                     xml_texto, config.software.ambiente, factura_id),
+                     xml_texto, ambiente, factura_id),
                 )  # fmt: skip
                 accion = "FACTURA_REENVIADA"
             conn.execute(

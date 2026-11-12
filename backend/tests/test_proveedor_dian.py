@@ -122,6 +122,20 @@ def test_documento_procesado_anteriormente_es_incierto():
         proveedor(c, test_set_id=None).emitir(solicitud())
 
 
+def test_documento_procesado_anteriormente_se_distingue_de_otros_inciertos():
+    # La cola necesita saberlo: si además la DIAN no tiene NUESTRO CUFE, el número lo usó otro documento (otra base).
+    from estacion.facturacion.proveedor import ProveedorNumeroProcesado
+
+    errores = ("Regla: 90, Rechazo: Documento procesado anteriormente.",)
+    c = ClienteFalso(enviar_sincrono=RespuestaDian(False, "99", "Errores", errores, None, ""))
+    with pytest.raises(ProveedorNumeroProcesado):
+        proveedor(c, test_set_id=None).emitir(solicitud())
+    c98 = ClienteFalso(enviar_sincrono=RespuestaDian(False, "98", "Intente más tarde", (), None, ""))
+    with pytest.raises(ProveedorIncierto) as e:
+        proveedor(c98, test_set_id=None).emitir(solicitud())
+    assert not isinstance(e.value, ProveedorNumeroProcesado)
+
+
 @pytest.mark.parametrize(
     "respuesta",
     [
