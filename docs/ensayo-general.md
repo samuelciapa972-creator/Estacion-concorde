@@ -17,8 +17,8 @@
 - [ ] `infra/caddy-root.crt` a mano (`make ca`), por si hay que instalarlo en otra tablet.
 - [ ] Un respaldo de la base antes de salir: `docker compose --project-directory . -f infra/docker-compose.yml exec -T db pg_dump -U estacion -Fc estacion > $HOME/respaldo_antes_ensayo.dump`
 - [ ] Cuentas de prueba listas: un cliente **empresa (NIT)** y uno con **cédula**, con correos a los que se tenga acceso.
-- [ ] Llevar: portátil y cargador, tablet o teléfono, la impresora térmica con su cable (y adaptador OTG si es USB),
-      papel térmico, esta hoja impresa y un esfero.
+- [ ] Llevar: portátil y cargador, tablet o teléfono, un **cable USB-A a USB-B** (de impresora), un **adaptador
+      OTG** para la tablet (ver B2), papel térmico, esta hoja impresa y un esfero.
 
 ## B. Al llegar a la estación: red
 
@@ -39,6 +39,90 @@
 | IP del portátil en la estación | |
 | Red wifi usada (nombre) y señal en la isla (buena / regular / mala) | |
 | ¿La tablet abrió `/pista` sin advertencia? | |
+
+## B2. Impresora del recibo (RawBT)
+
+> Lo que se sabe (visita del 2026-11-06). La térmica de la isla es una **POS-5890U-L**: 58 mm, ESC/POS,
+> conexión **USB y Bluetooth, sin red**. Por eso RawBT con "IP 192.168.1.1, puerto 9100" falló con *failed to
+> connect … after 5000ms*: esa impresora no tiene IP. Además, **no es de la tablet**: el botón Imprimir de Nexus
+> le pide a la Raspberry (`POST /imprimir_venta`) que imprima, y es la Raspberry la que tiene la impresora. Por
+> la foto de abajo solo tiene conectado el cable de corriente, así que la Raspberry la usa **por Bluetooth**; por
+> eso no aparece en la búsqueda de la tablet. El **USB queda libre**. No se toca el Bluetooth de la Raspberry ni
+> se usa `/imprimir_venta` (Nexus dejaría de imprimir, y eso está fuera del permiso de solo lectura).
+>
+> Dos caminos para operar, con permiso de la empresa porque la impresora es de IMED:
+> - **Compartirla:** la Raspberry imprime por Bluetooth y la tablet por **USB con adaptador OTG** (RawBT en modo
+>   USB). No hay que comprar nada. Riesgo bajo: dos impresiones en el mismo segundo se mezclan.
+> - **Una segunda térmica de 58 mm** solo para nuestro sistema. Si es el mismo modelo, POS-5890U-L, queda probada.
+>
+> En los dos casos el código no cambia: el recibo ya sale en ESC/POS de 58 mm.
+
+**Primero, inalámbrica: ¿la impresora está libre por Bluetooth? (solo escucha, no toca nada)**
+
+Estas impresoras aceptan **una sola conexión Bluetooth a la vez**. Si la Raspberry la tiene conectada todo el
+tiempo, no aparece en la búsqueda. Si solo se conecta cuando imprime, sí aparece y se puede usar sin cables.
+
+1. En el portátil: `bluetoothctl --timeout 30 scan on`. Buscar un nombre como `Printer001`, `POS58` o
+   `BlueTooth Printer`, o una dirección sin nombre que aparezca y desaparezca cuando se apaga la impresora.
+2. **Si aparece:** `bluetoothctl pair XX:XX:XX:XX:XX:XX` (PIN `0000` o `1234`) y enviar el recibo:
+   ```bash
+   python3 -c "import socket,sys;s=socket.socket(socket.AF_BLUETOOTH,socket.SOCK_STREAM,socket.BTPROTO_RFCOMM);s.connect((sys.argv[1],1));s.sendall(open(sys.argv[2],'rb').read());s.close()" XX:XX:XX:XX:XX:XX datos/impresora/recibo_SETP990000018.bin
+   ```
+   Luego imprimir desde Nexus para confirmar que la Raspberry sigue imprimiendo. Si todo sale bien, la tablet
+   también puede usarla por Bluetooth con RawBT.
+3. **Si no aparece:** la Raspberry la tiene tomada; seguir con la prueba por USB. **No** apagar la impresora para
+   quitársela a la Raspberry: puede que no se reconecte sola y Nexus quede sin imprimir. Solo con autorización
+   escrita de la empresa y alguien de IMED presente.
+
+**Si no, por cable: prueba directa desde el portátil (C6 sin RawBT, sin interrumpir a Nexus)**
+
+En casa: **reiniciar el portátil** si se actualizó el kernel. Sin el módulo `usblp` no aparece `/dev/usb/lp0`.
+El recibo de prueba (SETP990000018) ya está en `datos/impresora/recibo_SETP990000018.bin`; para otra factura se
+descarga con el botón Recibo.
+
+1. Con permiso del encargado: un cable **USB-A a USB-B** del portátil al puerto USB de la impresora. El
+   Bluetooth de la Raspberry no se toca.
+2. `ls /dev/usb/` debe mostrar `lp0`. Luego `cat datos/impresora/recibo_SETP990000018.bin > /dev/usb/lp0`.
+3. Revisar C6 en el papel (logo, tildes, ñ, razón social, NIT y QR) y C7 (escanear el QR).
+4. Retirar el cable e **imprimir algo desde Nexus** para confirmar que sigue igual.
+
+**Confirmar cómo está conectada (sin desconectar nada)**
+
+- [ ] Foto de toda la parte de atrás y de abajo: ¿solo el cable de corriente? ¿El USB está libre?
+- [ ] Hoja de autoprueba: apagarla y encenderla **con FEED presionado**. Foto de la hoja: ¿trae nombre, dirección
+      o PIN de Bluetooth?
+- [ ] En la tablet, Ajustes → Bluetooth → **Dispositivos vinculados**: foto de la lista.
+- [ ] Al encenderla, ¿se prende una luz azul (Bluetooth)?
+- [ ] Imprimir algo desde Nexus y confirmar que sigue imprimiendo después de las pruebas.
+
+**Con la tablet por USB (impresora compartida)**
+
+1. Adaptador **OTG** de la tablet (USB-C o micro-USB, según la tablet) a USB-A hembra, y el cable USB-A a USB-B
+   hasta la impresora.
+2. Android pregunta si RawBT puede usar el dispositivo USB: aceptar y marcar "usar siempre".
+3. En RawBT, Add printer: conexión **USB**, controlador **ESC/POS general**, papel de **58 mm**. Impresión de
+   prueba; luego C6, C7 y D8.
+4. Imprimir desde Nexus y desde nuestro sistema, alternando, para ver que las dos sigan funcionando.
+
+**Con una impresora propia (Bluetooth)**
+
+1. Encenderla y buscarla en la tablet (Ajustes → Bluetooth) en los primeros 30 segundos. Si no sale, encender la
+   **ubicación** de la tablet: algunas versiones de Android no buscan sin ella. Puede salir sin nombre, solo con la
+   dirección (`XX:XX:…`). Si pide PIN: `0000` o `1234`.
+2. En RawBT, Add printer: conexión **Bluetooth** (no red), la impresora emparejada, controlador **ESC/POS
+   general**, papel de **58 mm**. Pulsar la impresión de prueba de RawBT.
+3. Seguir con C6, C7 y D8.
+4. Plan B, si el Bluetooth falla: cable USB con adaptador **OTG** a la tablet y en RawBT la conexión **USB**.
+
+| | Anotación |
+|---|---|
+| ¿Cómo está conectada la impresora de Nexus? (USB a la Raspberry / Bluetooth / otro) | |
+| ¿Apareció la impresora en el escaneo Bluetooth del portátil? (nombre y dirección) | |
+| ¿Imprimió el recibo desde el portátil (Bluetooth / USB)? ¿Cómo salieron el logo, las tildes y el QR? | |
+| ¿La tablet acepta OTG? ¿RawBT imprimió por USB? | |
+| Nombre o dirección Bluetooth de nuestra impresora | |
+| ¿Imprimió la prueba de RawBT? | |
+| ¿Nexus sigue imprimiendo bien? | |
 
 ## C. Pruebas de facturación (lo normal)
 
